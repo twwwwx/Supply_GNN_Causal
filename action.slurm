@@ -1,12 +1,20 @@
 #!/bin/bash
-#SBATCH --job-name=sim-study
-#SBATCH --output=results/slurm_%j.out
-#SBATCH --error=results/slurm_%j.err
-#SBATCH --time=00:30:00
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=4G
+#SBATCH --job-name=sim          # Job name
+#SBATCH --time=0:10:00             # Time limit hrs:min:sec
+#SBATCH --account=one_sc_default
+#SBATCH --output=/dev/null      # Prevent SLURM from handling output directly
+#SBATCH --mem=1G                # Memory demand (e.g., 4GB)
+#SBATCH --cpus-per-task=1
 
-set -euo pipefail
-cd "$(dirname "$0")"
+log_name=$(date +"%m%d%H%M")
+log_file="log/${log_name}.log"
 
-python3 sim.py --num-runs 5 --sample-sizes 100,500,1000
+module load python
+
+# Redirect all output to the log file
+exec > "$log_file" 2>&1
+
+python test/test_load.py
+# Output the job number to the log file
+echo "Job ID: ${SLURM_JOB_ID}"
+

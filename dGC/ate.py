@@ -1,8 +1,8 @@
+import numpy as np
+
 from .utils import (
     clip_probs,
     doubly_robust_scores,
-    mean,
-    standard_error,
     to_1d_float,
 )
 
@@ -52,17 +52,18 @@ def tau_hat_from_gnn(
         if len(p) != n:
             raise ValueError("p length does not match Y length.")
         psi = doubly_robust_scores(y, t, mu1, mu0, p)
-        tau_hat = mean(psi)
+        psi_arr = np.asarray(psi, dtype=float)
+        tau_hat = float(np.mean(psi_arr))
         if return_details:
             return {
                 "tau_hat": tau_hat,
-                "se": standard_error(psi),
+                "se": 0.0 if psi_arr.size <= 1 else float(np.sqrt(np.var(psi_arr, ddof=1) / psi_arr.size)),
                 "estimator": "dr_aipw",
                 "n": int(n),
             }
         return tau_hat
 
-    tau_hat = mean([m1 - m0 for m1, m0 in zip(mu1, mu0)])
+    tau_hat = float(np.mean(np.asarray([m1 - m0 for m1, m0 in zip(mu1, mu0)], dtype=float)))
     if return_details:
         return {
             "tau_hat": tau_hat,
