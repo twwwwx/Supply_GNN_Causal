@@ -1,0 +1,3 @@
+run_id,sample_size,model_name,intercept,beta,beta2,metric_name,metric_value
+1,30,linear_v1,0.5,1.2,0.0,mse,2.109123
+1,30,quadratic_v1,0.2,1.0,0.15,mse,2.667079

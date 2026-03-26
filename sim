@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -f "$ROOT_DIR/sim.py" ]]; then
+  exec python3 "$ROOT_DIR/sim.py" "$@"
+fi
+
+if [[ -f "$ROOT_DIR/sim.R" ]]; then
+  exec Rscript "$ROOT_DIR/sim.R" "$@"
+fi
+
+echo "No sim.py or sim.R found in $ROOT_DIR" >&2
+exit 1
