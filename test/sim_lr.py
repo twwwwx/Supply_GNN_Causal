@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dGC.baseline import estimate_tau_hat_dr_linear
-from dGC.gen_data import sample_data
+from dGC.gen_data import sample_data_undir
 
 
 def main() -> None:
@@ -27,7 +27,7 @@ def main() -> None:
 
     tau_hats = []
     for i in range(args.num_preds):
-        draw = sample_data(
+        draw = sample_data_undir(
             sample_size=args.sample_size,
             seed=args.seed + i,
             graph_model=args.graph_model,

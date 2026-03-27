@@ -8,6 +8,8 @@ import numpy as np
 X_SUPPORT = np.array([0.0, 0.25, 0.5, 0.75, 1.0], dtype=float)
 THETA_D = (-0.5, 1.5, 1.0, -1.0)
 THETA_Y_MANUAL = (0.5, 2.0, 10.0, 1.0)  # (theta_1, theta_2=tau, theta_3, theta_4)
+THETA_D_DIR = (-0.5, 1.0, 0.8, 1.0, -0.6, 1.0)  # (alpha, b_in, b_out, d_in, d_out, gamma)
+THETA_Y_DIR = (0.5, 2.0, 8.0, 4.0, 1.0)  # (theta_1, theta_2=tau, theta_in, theta_out, theta_x)
 
 
 def _matvec(matrix: np.ndarray, vector: np.ndarray) -> np.ndarray:
@@ -25,6 +27,28 @@ def _network_index(
     return alpha + beta * (weights @ z) + delta * (weights @ x) + gamma * x + u + (weights @ u)
 
 
+def _network_index_dir(
+    z: np.ndarray,
+    u: np.ndarray,
+    x: np.ndarray,
+    weights_in: np.ndarray,
+    weights_out: np.ndarray,
+    theta: tuple[float, float, float, float, float, float],
+) -> np.ndarray:
+    alpha, beta_in, beta_out, delta_in, delta_out, gamma = theta
+    return (
+        alpha
+        + beta_in * (weights_in @ z)
+        + beta_out * (weights_out @ z)
+        + delta_in * (weights_in @ x)
+        + delta_out * (weights_out @ x)
+        + gamma * x
+        + u
+        + (weights_in @ u)
+        + (weights_out @ u)
+    )
+
+
 def _solve_treatment_equilibrium(
     x: np.ndarray,
     nu: np.ndarray,
@@ -34,6 +58,26 @@ def _solve_treatment_equilibrium(
     d_curr = (_network_index(np.zeros_like(x), nu, x, weights, THETA_D) > 0.0).astype(int)
     for step in range(1, max_iter + 1):
         d_next = (_network_index(d_curr.astype(float), nu, x, weights, THETA_D) > 0.0).astype(int)
+        if np.array_equal(d_next, d_curr):
+            return d_next, step
+        d_curr = d_next
+    return d_curr, max_iter
+
+
+def _solve_treatment_equilibrium_dir(
+    x: np.ndarray,
+    nu: np.ndarray,
+    weights_in: np.ndarray,
+    weights_out: np.ndarray,
+    max_iter: int,
+) -> tuple[np.ndarray, int]:
+    d_curr = (
+        _network_index_dir(np.zeros_like(x), nu, x, weights_in, weights_out, THETA_D_DIR) > 0.0
+    ).astype(int)
+    for step in range(1, max_iter + 1):
+        d_next = (
+            _network_index_dir(d_curr.astype(float), nu, x, weights_in, weights_out, THETA_D_DIR) > 0.0
+        ).astype(int)
         if np.array_equal(d_next, d_curr):
             return d_next, step
         d_curr = d_next
@@ -79,7 +123,35 @@ def _gen_er(n: int, rng: np.random.Generator) -> np.ndarray:
     return adjacency
 
 
-def sample_data(
+def _orient_undirected_edges(skeleton: np.ndarray, rng: np.random.Generator, p_bidirected: float) -> np.ndarray:
+    if not (0.0 <= p_bidirected < 1.0):
+        raise ValueError("p_bidirected must be in [0, 1).")
+    directed = np.zeros_like(skeleton, dtype=np.int8)
+    edges = np.argwhere(np.triu(skeleton, 1) > 0)
+    if edges.size == 0:
+        return directed
+    draws = rng.random(edges.shape[0])
+    p_forward = (1.0 - p_bidirected) / 2.0
+    for idx, (i, j) in enumerate(edges):
+        if draws[idx] < p_bidirected:
+            directed[i, j] = 1
+            directed[j, i] = 1
+        elif draws[idx] < p_bidirected + p_forward:
+            directed[i, j] = 1
+        else:
+            directed[j, i] = 1
+    return directed
+
+
+def _gen_rgg_dir(n: int, rng: np.random.Generator, p_bidirected: float) -> np.ndarray:
+    return _orient_undirected_edges(_gen_rgg(n, rng), rng, p_bidirected)
+
+
+def _gen_er_dir(n: int, rng: np.random.Generator, p_bidirected: float) -> np.ndarray:
+    return _orient_undirected_edges(_gen_er(n, rng), rng, p_bidirected)
+
+
+def sample_data_undir(
     sample_size: int,
     seed: int,
     graph_model: Literal["rgg", "er"] = "rgg",
@@ -144,6 +216,104 @@ def sample_data(
         },
         "legacy_rows": np.column_stack([x, y]),
     }
+
+
+def sample_data_dir(
+    sample_size: int,
+    seed: int,
+    graph_model: Literal["rgg", "er"] = "rgg",
+    p_bidirected: float = 0.05,
+    treatment_max_iter: int = 500,
+    outcome_max_iter: int = 2000,
+    outcome_tol: float = 1e-10,
+) -> dict:
+    del outcome_max_iter, outcome_tol
+    if sample_size <= 0:
+        raise ValueError("sample_size must be positive.")
+
+    rng = np.random.default_rng(seed)
+    model = graph_model.lower()
+    if model == "rgg":
+        adjacency = _gen_rgg_dir(sample_size, rng, p_bidirected=p_bidirected)
+    elif model == "er":
+        adjacency = _gen_er_dir(sample_size, rng, p_bidirected=p_bidirected)
+    else:
+        raise ValueError("graph_model must be either 'rgg' or 'er'.")
+
+    weights_out, out_degree = _row_normalize(adjacency)
+    weights_in, in_degree = _row_normalize(adjacency.T)
+
+    x = rng.choice(X_SUPPORT, size=sample_size, replace=True)
+    nu = rng.normal(0.0, 1.0, size=sample_size)
+    u = rng.normal(0.0, 1.0, size=sample_size)
+    d0 = (
+        _network_index_dir(
+            np.zeros(sample_size, dtype=float),
+            nu,
+            x,
+            weights_in,
+            weights_out,
+            THETA_D_DIR,
+        )
+        > 0.0
+    ).astype(int)
+    d, treat_iters = _solve_treatment_equilibrium_dir(
+        x=x,
+        nu=nu,
+        weights_in=weights_in,
+        weights_out=weights_out,
+        max_iter=treatment_max_iter,
+    )
+
+    neighbor_x_in = _matvec(weights_in, x)
+    neighbor_x_out = _matvec(weights_out, x)
+    wu_in = _matvec(weights_in, u)
+    wu_out = _matvec(weights_out, u)
+    theta_1, theta_2, theta_in, theta_out, theta_x = THETA_Y_DIR
+    y = theta_1 + theta_2 * d + theta_in * neighbor_x_in + theta_out * neighbor_x_out - theta_x * x + u + wu_in + wu_out
+
+    degree_total = in_degree + out_degree
+    node_features = np.column_stack([x, in_degree, out_degree, neighbor_x_in, neighbor_x_out]).astype(float)
+    tabular_features = np.column_stack([x, neighbor_x_in, neighbor_x_out, in_degree, out_degree]).astype(float)
+
+    return {
+        "n": int(sample_size),
+        "seed": int(seed),
+        "graph_model": model,
+        "dgp_variant": "manual_linear_treatment_equilibrium_directed",
+        "true_tau": float(theta_2),
+        "adjacency": adjacency,
+        "adjacency_skeleton": np.logical_or(adjacency != 0, adjacency.T != 0).astype(np.int8),
+        "row_normalized_adjacency": weights_out,
+        "row_normalized_adjacency_in": weights_in,
+        "row_normalized_adjacency_out": weights_out,
+        "degree": out_degree,
+        "in_degree": in_degree,
+        "out_degree": out_degree,
+        "degree_total": degree_total,
+        "X": x,
+        "epsilon": u,
+        "nu": nu,
+        "D_init": d0,
+        "D": d,
+        "Y": y,
+        "T": d.copy(),
+        "node_features": node_features,
+        "tabular_features": tabular_features,
+        "theta_d": np.asarray(THETA_D_DIR, dtype=float),
+        "theta_y": np.asarray(THETA_Y_DIR, dtype=float),
+        "convergence": {
+            "treatment_iterations": int(treat_iters),
+            "outcome_iterations": 1,
+            "treatment_converged": bool(treat_iters < treatment_max_iter),
+            "outcome_converged": True,
+        },
+        "legacy_rows": np.column_stack([x, y]),
+    }
+
+
+# Backward-compatible alias for existing callers.
+sample_data = sample_data_undir
 
 
 def sample_data_simple(
@@ -211,5 +381,5 @@ def sample_data_simple(
 
 
 if __name__ == "__main__":
-    draw = sample_data(sample_size=500, seed=123, graph_model="rgg")
+    draw = sample_data_undir(sample_size=500, seed=123, graph_model="rgg")
     print(f"treated_proportion={float(np.mean(draw['D'])):.6f}")

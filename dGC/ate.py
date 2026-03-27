@@ -1,10 +1,10 @@
 import numpy as np
 
 try:
-    from .GNN import GNN_reg
+    from .GNN import GNN_reg, GNN_reg_dir
     from .utils import clip_probs, doubly_robust_scores
 except ImportError:
-    from GNN import GNN_reg
+    from GNN import GNN_reg, GNN_reg_dir
     from utils import clip_probs, doubly_robust_scores
 
 
@@ -17,6 +17,7 @@ def tau_hat_from_gnn(
     num_layers: int = 2,
     output_dim: int = 6,
     seed: int = 0,
+    directed: bool = False,
 ) -> float:
     y = np.asarray(data[outcome_key], dtype=float).squeeze()
     d = np.asarray(data[treatment_key], dtype=float).squeeze()
@@ -29,9 +30,10 @@ def tau_hat_from_gnn(
     control_mask = ~treated_mask
     if not np.any(treated_mask) or not np.any(control_mask):
         raise ValueError("Need both treated and control units to compute DR tau.")
+    reg_fn = GNN_reg_dir if directed else GNN_reg
 
     mu1_hat = np.asarray(
-        GNN_reg(
+        reg_fn(
             Y=y,
             X=x,
             A=a,
@@ -43,7 +45,7 @@ def tau_hat_from_gnn(
         dtype=float,
     )
     mu0_hat = np.asarray(
-        GNN_reg(
+        reg_fn(
             Y=y,
             X=x,
             A=a,
@@ -55,7 +57,7 @@ def tau_hat_from_gnn(
         dtype=float,
     )
     p_hat = np.asarray(
-        GNN_reg(
+        reg_fn(
             Y=d.astype(int),
             X=x,
             A=a,

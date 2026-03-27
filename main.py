@@ -1,7 +1,7 @@
 from pathlib import Path
 import csv
 
-from dGC.gen_data import sample_data
+from dGC.gen_data import sample_data_undir
 from dGC.baseline import DEFAULT_MODEL_SPECS
 
 
@@ -56,7 +56,7 @@ def run_pipeline(
     written_rows = 0
     for run_id in range(1, num_runs + 1):
         for sample_size in sample_sizes:
-            sample = sample_data(sample_size, base_seed + 1000 * run_id + sample_size)
+            sample = sample_data_undir(sample_size, base_seed + 1000 * run_id + sample_size)
             for spec in model_specs:
                 mse = evaluate_model(sample, spec)
                 append_metric(
