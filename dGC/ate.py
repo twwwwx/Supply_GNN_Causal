@@ -1,74 +1,93 @@
 import numpy as np
 
-from .utils import (
-    clip_probs,
-    doubly_robust_scores,
-    to_1d_float,
-)
+try:
+    from .GNN import GNN_reg
+    from .utils import clip_probs, doubly_robust_scores
+except ImportError:
+    from GNN import GNN_reg
+    from utils import clip_probs, doubly_robust_scores
 
 
 def tau_hat_from_gnn(
-    gnn_outputs: dict,
     data: dict,
     outcome_key: str = "Y",
-    treatment_key: str = "T",
+    treatment_key: str = "D",
+    feature_key: str = "node_features",
     clip: float = 1e-3,
-    return_details: bool = False,
-):
-    """
-    Estimate ATE tau_hat from GNN nuisance predictions and observed data.
+    num_layers: int = 2,
+    output_dim: int = 6,
+    seed: int = 0,
+) -> float:
+    y = np.asarray(data[outcome_key], dtype=float).squeeze()
+    d = np.asarray(data[treatment_key], dtype=float).squeeze()
+    x = np.asarray(data[feature_key], dtype=float)
+    if x.ndim == 1:
+        x = x[:, None]
+    a = data["adjacency"]
 
-    Required keys in gnn_outputs:
-    - "mu1": E[Y | T=1, X, A] predictions
-    - "mu0": E[Y | T=0, X, A] predictions
+    treated_mask = d > 0.5
+    control_mask = ~treated_mask
+    if not np.any(treated_mask) or not np.any(control_mask):
+        raise ValueError("Need both treated and control units to compute DR tau.")
 
-    Optional key in gnn_outputs:
-    - "p" or "propensity": P(T=1 | X, A) predictions.
-      If present, uses DR-AIPW. Otherwise uses plug-in mean(mu1 - mu0).
+    mu1_hat = np.asarray(
+        GNN_reg(
+            Y=y,
+            X=x,
+            A=a,
+            sample=treated_mask.astype(bool),
+            num_layers=num_layers,
+            output_dim=output_dim,
+            seed=seed,
+        ),
+        dtype=float,
+    )
+    mu0_hat = np.asarray(
+        GNN_reg(
+            Y=y,
+            X=x,
+            A=a,
+            sample=control_mask.astype(bool),
+            num_layers=num_layers,
+            output_dim=output_dim,
+            seed=seed + 1,
+        ),
+        dtype=float,
+    )
+    p_hat = np.asarray(
+        GNN_reg(
+            Y=d.astype(int),
+            X=x,
+            A=a,
+            num_layers=num_layers,
+            output_dim=output_dim,
+            seed=seed + 2,
+        ),
+        dtype=float,
+    )
 
-    Required keys in data:
-    - outcome_key (default "Y")
-    - treatment_key (default "T"), with fallback to "D" when "T" missing.
-    """
-    y = to_1d_float(data[outcome_key])
-    if treatment_key in data:
-        t = to_1d_float(data[treatment_key])
-    elif "D" in data:
-        t = to_1d_float(data["D"])
-    else:
-        raise KeyError(f"Data must include '{treatment_key}' or 'D'.")
+    p_hat = np.asarray(clip_probs(p_hat.tolist(), clip=clip), dtype=float)
+    psi = np.asarray(doubly_robust_scores(y, d, mu1_hat, mu0_hat, p_hat), dtype=float)
+    return float(np.mean(psi))
 
-    mu1 = to_1d_float(gnn_outputs["mu1"])
-    mu0 = to_1d_float(gnn_outputs["mu0"])
 
-    n = len(y)
-    for name, arr in (("T", t), ("mu1", mu1), ("mu0", mu0)):
-        if len(arr) != n:
-            raise ValueError(f"{name} length does not match Y length.")
+if __name__ == "__main__":
+    try:
+        from .gen_data import sample_data_simple
+    except ImportError:
+        from gen_data import sample_data_simple
 
-    if "p" in gnn_outputs or "propensity" in gnn_outputs:
-        p_raw = gnn_outputs["p"] if "p" in gnn_outputs else gnn_outputs["propensity"]
-        p = clip_probs(to_1d_float(p_raw), clip=clip)
-        if len(p) != n:
-            raise ValueError("p length does not match Y length.")
-        psi = doubly_robust_scores(y, t, mu1, mu0, p)
-        psi_arr = np.asarray(psi, dtype=float)
-        tau_hat = float(np.mean(psi_arr))
-        if return_details:
-            return {
-                "tau_hat": tau_hat,
-                "se": 0.0 if psi_arr.size <= 1 else float(np.sqrt(np.var(psi_arr, ddof=1) / psi_arr.size)),
-                "estimator": "dr_aipw",
-                "n": int(n),
-            }
-        return tau_hat
-
-    tau_hat = float(np.mean(np.asarray([m1 - m0 for m1, m0 in zip(mu1, mu0)], dtype=float)))
-    if return_details:
-        return {
-            "tau_hat": tau_hat,
-            "se": None,
-            "estimator": "plugin",
-            "n": int(n),
-        }
-    return tau_hat
+    base_seed = 123
+    n = 200
+    true_tau = 2.0
+    print(f"true_tau={true_tau:.6f}")
+    for i in range(10):
+        draw = sample_data_simple(
+            sample_size=n,
+            seed=base_seed + i,
+            graph_model="rgg",
+            tau=true_tau,
+            p_treat=0.5,
+        )
+        tau_hat = tau_hat_from_gnn(draw, seed=base_seed + i)
+        print(f"tau_hat_{i + 1}={tau_hat:.6f}")

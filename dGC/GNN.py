@@ -6,13 +6,9 @@ from torch_geometric.utils import degree
 
 
 def _to_edge_index(A, n: int) -> np.ndarray:
-    if hasattr(A, "edges"):
-        edges = np.asarray(list(A.edges()), dtype=np.int64)
-        if edges.size == 0:
-            return np.empty((2, 0), dtype=np.int64)
-        return np.vstack([edges, edges[:, [1, 0]]]).T
-
     adjacency = np.asarray(A)
+    if adjacency.ndim != 2 or adjacency.shape[0] != adjacency.shape[1]:
+        raise ValueError("Adjacency must be a square matrix.")
     if adjacency.shape[0] != n:
         raise ValueError("Adjacency and Y/X row count do not match.")
     undirected = np.logical_or(adjacency != 0, adjacency.T != 0)
@@ -70,22 +66,14 @@ def train(data, model, criterion, optimizer, sample):
 
 def GNN_reg(
     Y,
-    X=None,
-    A=None,
+    X,
+    A,
     num_layers=2,
     output_dim=6,
     sample=False,
     seed=0,
-    feature_key: str = "node_features",
 ):
     """Nonparametric regression using GNN."""
-    # Compatibility mode: allow passing a sample dict as first argument.
-    if isinstance(Y, dict):
-        sample_dict = Y
-        Y = sample_dict["Y"]
-        X = sample_dict.get(feature_key, sample_dict["X"])
-        A = sample_dict["adjacency"]
-
     Y = np.asarray(Y)
     Y = np.squeeze(Y)
     X = np.asarray(X, dtype=float)
