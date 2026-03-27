@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dGC.baseline import estimate_tau_hat_dr_linear
-from dGC.gen_data import sample_data_undir
+from src.baseline import estimate_tau_hat_dr_linear
+from src.gen_data import sample_data_undir
 
 
 def main() -> None:

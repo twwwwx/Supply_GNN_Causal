@@ -264,7 +264,7 @@ if __name__ == "__main__":
         from .gen_data import sample_data_simple
     except ImportError:
         try:
-            from dGC.gen_data import sample_data_simple
+            from src.gen_data import sample_data_simple
         except ImportError:
             from gen_data import sample_data_simple
 

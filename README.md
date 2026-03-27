@@ -13,14 +13,19 @@ python sim.py --help
 Key args:
 - `--model`: `linear`, `gnn`, `dirgnn`
 - `--DGP`: `undir`, `simple_undir`, `dir`
-- `--num_runs`: number of Monte Carlo draws (default `1000`)
+- `--num_runs`: number of Monte Carlo draws
 - `--n`: sample size per draw
+- `--variance_type`: `iid`, `skeleton`, `directed` (for `gnn`/`dirgnn`)
+- `--variance_method`: kernel selector inside variance type
+- `--bandwidth`: optional fixed bandwidth (otherwise auto from graph)
 - `--metrics_csv`: output CSV path
 
 Each run appends one row to `metrics_csv` with:
 - model/DGP/args
 - `mean_tau_hat`
 - `mse_tau_hat`
+- `se_tau_hat` (Monte Carlo SE of tau-hat across replications)
+- `mean_se_hat` (average estimated SE from per-draw variance estimator)
 
 ## Examples
 
@@ -43,7 +48,7 @@ python sim.py \
   --metrics_csv results/metrics.csv
 ```
 
-### 2) Undirected GNN on equilibrium undirected DGP
+### 2) Undirected GNN with symmetrized variance (`K_max`)
 
 ```bash
 python sim.py \
@@ -59,10 +64,12 @@ python sim.py \
   --clip 0.001 \
   --L 2 \
   --output_dim 6 \
+  --variance_type skeleton \
+  --variance_method max \
   --metrics_csv results/metrics.csv
 ```
 
-### 3) Directed GNN on directed DGP
+### 3) Directed GNN with directed variance (`K_dir_max`)
 
 ```bash
 python sim.py \
@@ -78,13 +85,27 @@ python sim.py \
   --clip 0.001 \
   --L 2 \
   --output_dim 6 \
+  --variance_type directed \
+  --variance_method dir_max \
   --metrics_csv results/metrics.csv
 ```
 
 ## SLURM usage
 
-You can submit the batch script:
+Default batch run (uses `test/sim_gnn.py` with directed settings from `action.slurm`):
 
 ```bash
 sbatch action.slurm
+```
+
+Override command on submission:
+
+```bash
+sbatch --export=SIM_SCRIPT=sim.py,SIM_ARGS="--model dirgnn --DGP dir --num_runs 300 --n 500 --variance_type directed --variance_method dir_max --metrics_csv results/dirgnn_metrics.csv" action.slurm
+```
+
+Run undirected GNN with symmetrized variance via SLURM:
+
+```bash
+sbatch --export=SIM_SCRIPT=sim.py,SIM_ARGS="--model gnn --DGP undir --num_runs 300 --n 500 --variance_type skeleton --variance_method max --metrics_csv results/gnn_metrics.csv" action.slurm
 ```

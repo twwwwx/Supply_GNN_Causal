@@ -8,8 +8,8 @@ import warnings
 import numpy as np
 from tqdm import tqdm
 
-from dGC.baseline import estimate_tau_hat_dr_linear
-from dGC.gen_data import sample_data_undir, sample_data_simple, sample_data_dir
+from src.baseline import estimate_tau_hat_dr_linear
+from src.gen_data import sample_data_undir, sample_data_simple, sample_data_dir
 
 # Keep repeated PyG import warnings compact in logs.
 warnings.filterwarnings("once", category=UserWarning, module=r"torch_geometric")
@@ -31,8 +31,13 @@ def append_row(csv_path: Path, row: dict) -> None:
         "clip",
         "L",
         "output_dim",
+        "variance_type",
+        "variance_method",
+        "bandwidth",
         "mean_tau_hat",
         "mse_tau_hat",
+        "se_tau_hat",
+        "mean_se_hat",
     ]
     with csv_path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -61,24 +66,49 @@ def draw_data(DGP: str, n: int, seed: int, gen_graph: str, tau_true: float, p_tr
     raise ValueError("DGP must be one of: undir, simple_undir, dir.")
 
 
-def tau_hat_from_model(model: str, draw: dict, features: str, clip: float, L: int, output_dim: int, seed: int) -> float:
+def estimate_from_model(
+    model: str,
+    draw: dict,
+    features: str,
+    clip: float,
+    L: int,
+    output_dim: int,
+    seed: int,
+    variance_type: str,
+    variance_method: str | None,
+    bandwidth: int | None,
+) -> dict:
     if model == "linear":
         fit = estimate_tau_hat_dr_linear(draw, feature_key=features, clip=clip)
-        return float(fit["tau_hat"])
+        return {
+            "tau_hat": float(fit["tau_hat"]),
+            "se_hat": None,
+            "variance_type": "none",
+            "variance_method": "none",
+            "bandwidth": None,
+        }
     if model in {"gnn", "dirgnn"}:
-        from dGC.ate import tau_hat_from_gnn
+        from src.ate import tau_hat_and_se_from_gnn
 
-        return float(
-            tau_hat_from_gnn(
-                draw,
-                feature_key=features,
-                clip=clip,
-                num_layers=L,
-                output_dim=output_dim,
-                seed=seed,
-                directed=(model == "dirgnn"),
-            )
+        fit = tau_hat_and_se_from_gnn(
+            draw,
+            feature_key=features,
+            clip=clip,
+            num_layers=L,
+            output_dim=output_dim,
+            seed=seed,
+            directed=(model == "dirgnn"),
+            variance_type=variance_type,
+            variance_method=variance_method,
+            bandwidth=bandwidth,
         )
+        return {
+            "tau_hat": float(fit["tau_hat"]),
+            "se_hat": float(fit["se_hat"]),
+            "variance_type": str(fit["variance_type"]),
+            "variance_method": str(fit["variance_method"]),
+            "bandwidth": fit["bandwidth"],
+        }
     raise ValueError("model must be one of: linear, gnn, dirgnn.")
 
 
@@ -96,6 +126,9 @@ def main():
     parser.add_argument("--clip", type=float, default=1e-3)
     parser.add_argument("--L", type=int, default=2)
     parser.add_argument("--output_dim", type=int, default=6)
+    parser.add_argument("--variance_type", type=str, default="skeleton", help="iid, skeleton, or directed")
+    parser.add_argument("--variance_method", type=str, default="", help="Kernel method inside variance type")
+    parser.add_argument("--bandwidth", type=int, default=None, help="Optional fixed bandwidth")
     parser.add_argument("--metrics_csv", type=str, default="results/metrics.csv")
     args = parser.parse_args()
 
@@ -106,6 +139,10 @@ def main():
         raise ValueError("--model must be linear, gnn, or dirgnn.")
     if DGP not in {"undir", "simple_undir", "dir"}:
         raise ValueError("--DGP must be undir, simple_undir, or dir.")
+    variance_type = args.variance_type.lower()
+    if variance_type not in {"iid", "skeleton", "directed"}:
+        raise ValueError("--variance_type must be iid, skeleton, or directed.")
+    variance_method = args.variance_method.strip() or None
 
     features_arg = args.features
     if features_arg == "nodes":
@@ -122,6 +159,8 @@ def main():
         metrics_csv = root_dir / metrics_csv
 
     tau_hats = []
+    se_hats = []
+    bw_hats = []
     start_time = time.time()
     run_iter = range(args.num_runs)
     if model in {"gnn", "dirgnn"}:
@@ -137,7 +176,7 @@ def main():
             tau_true=args.tau_true,
             p_treat=args.p_treat,
         )
-        tau_hat = tau_hat_from_model(
+        fit = estimate_from_model(
             model=model,
             draw=draw,
             features=features,
@@ -145,12 +184,28 @@ def main():
             L=args.L,
             output_dim=args.output_dim,
             seed=draw_seed,
+            variance_type=variance_type,
+            variance_method=variance_method,
+            bandwidth=args.bandwidth,
         )
-        tau_hats.append(tau_hat)
+        tau_hats.append(float(fit["tau_hat"]))
+        if fit["se_hat"] is not None:
+            se_hats.append(float(fit["se_hat"]))
+        if fit["bandwidth"] is not None:
+            bw_hats.append(float(fit["bandwidth"]))
 
     tau_hats_arr = np.asarray(tau_hats, dtype=float)
     mse_tau_hat = round(float(np.mean((tau_hats_arr - float(args.tau_true)) ** 2)), 3)
     mean_tau_hat = round(float(np.mean(tau_hats_arr)), 3)
+    if int(args.num_runs) > 1:
+        se_tau_hat = float(np.std(tau_hats_arr, ddof=1) / np.sqrt(float(args.num_runs)))
+    else:
+        se_tau_hat = 0.0
+    mean_se_hat = float(np.mean(np.asarray(se_hats, dtype=float))) if se_hats else 0.0
+    mean_bw_hat = float(np.mean(np.asarray(bw_hats, dtype=float))) if bw_hats else 0.0
+    variance_type_out = variance_type if model in {"gnn", "dirgnn"} else "none"
+    variance_method_out = (variance_method or "") if model in {"gnn", "dirgnn"} else ""
+    bandwidth_out = args.bandwidth if args.bandwidth is not None else (round(mean_bw_hat, 3) if bw_hats else "")
 
     append_row(
         metrics_csv,
@@ -167,13 +222,20 @@ def main():
             "clip": float(args.clip),
             "L": int(args.L),
             "output_dim": int(args.output_dim),
+            "variance_type": variance_type_out,
+            "variance_method": variance_method_out,
+            "bandwidth": bandwidth_out,
             "mean_tau_hat": mean_tau_hat,
             "mse_tau_hat": mse_tau_hat,
+            "se_tau_hat": round(se_tau_hat, 6),
+            "mean_se_hat": round(mean_se_hat, 6),
         },
     )
     print(
         f"saved n={args.n} model={model} DGP={DGP} "
-        f"mean_tau_hat={mean_tau_hat:.3f} mse_tau_hat={mse_tau_hat:.3f}"
+        f"mean_tau_hat={mean_tau_hat:.3f} mse_tau_hat={mse_tau_hat:.3f} "
+        f"se_tau_hat={se_tau_hat:.6f} mean_se_hat={mean_se_hat:.6f} "
+        f"var_type={variance_type_out} var_method={variance_method_out} bw={bandwidth_out}"
     )
     elapsed = time.time() - start_time
     print(f"evaluation_time_sec={elapsed:.3f} evaluation_time_min={elapsed/60.0:.3f}")
