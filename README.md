@@ -55,7 +55,7 @@ python sim.py \
   --gen_graph rgg \
   --tau_true 2.0 \
   --p_treat 0.5 \
-  --features node_features \
+  --features nodes \
   --clip 0.001 \
   --L 2 \
   --output_dim 6 \
@@ -74,7 +74,7 @@ python sim.py \
   --gen_graph rgg \
   --tau_true 2.0 \
   --p_treat 0.5 \
-  --features node_features \
+  --features nodes \
   --clip 0.001 \
   --L 2 \
   --output_dim 6 \

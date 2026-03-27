@@ -92,7 +92,7 @@ def main():
     parser.add_argument("--gen_graph", type=str, default="rgg")
     parser.add_argument("--tau_true", type=float, default=2.0)
     parser.add_argument("--p_treat", type=float, default=0.5)
-    parser.add_argument("--features", type=str, default="node_features")
+    parser.add_argument("--features", type=str, default="nodes")
     parser.add_argument("--clip", type=float, default=1e-3)
     parser.add_argument("--L", type=int, default=2)
     parser.add_argument("--output_dim", type=int, default=6)
@@ -107,10 +107,14 @@ def main():
     if DGP not in {"undir", "simple_undir", "dir"}:
         raise ValueError("--DGP must be undir, simple_undir, or dir.")
 
-    if model in {"gnn", "dirgnn"} and args.features == "X":
+    features_arg = args.features
+    if features_arg == "nodes":
+        features_arg = "node_features"
+
+    if model in {"gnn", "dirgnn"} and features_arg == "X":
         features = "node_features"
     else:
-        features = args.features
+        features = features_arg
 
     root_dir = Path(__file__).resolve().parent
     metrics_csv = Path(args.metrics_csv)

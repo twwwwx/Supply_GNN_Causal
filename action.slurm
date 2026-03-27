@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=sim          # Job name
-#SBATCH --time=2:00:00          # Time limit hrs:min:sec
+#SBATCH --time=2:30:00          # Time limit hrs:min:sec
 #SBATCH --account=one_sc_default
 #SBATCH --output=/dev/null      # Prevent SLURM from handling output directly
 #SBATCH --mem=1G                # Memory demand (e.g., 4GB)
@@ -21,13 +21,13 @@ for model in linear gnn dirgnn; do
     python sim.py \
       --model "$model" \
       --DGP "$DGP" \
-      --num_runs 1000 \
+      --num_runs 100 \
       --n 200 \
       --seed 123 \
       --gen_graph rgg \
       --tau_true 2.0 \
       --p_treat 0.5 \
-      --features X \
+      --features nodes \
       --clip 0.001 \
       --L 2 \
       --output_dim 6 \
