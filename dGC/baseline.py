@@ -9,11 +9,18 @@ DEFAULT_MODEL_SPECS = [
 ]
 
 
-from .utils import (
-    clip_probs,
-    doubly_robust_scores,
-    to_2d_float,
-)
+try:
+    from .utils import (
+        clip_probs,
+        doubly_robust_scores,
+        to_2d_float,
+    )
+except ImportError:
+    from utils import (
+        clip_probs,
+        doubly_robust_scores,
+        to_2d_float,
+    )
 
 
 
