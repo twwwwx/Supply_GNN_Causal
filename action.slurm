@@ -16,8 +16,8 @@ conda activate deep_learning
 exec > "$log_file" 2>&1
 
 # Run all model/DGP combos in one job (one row per command appended to metrics.csv)
-for model in gnn; do
-  for DGP in simple equilibrium; do
+for model in linear gnn dirgnn; do
+  for DGP in undir simple_undir dir; do
     python sim.py \
       --model "$model" \
       --DGP "$DGP" \
@@ -27,7 +27,7 @@ for model in gnn; do
       --gen_graph rgg \
       --tau_true 2.0 \
       --p_treat 0.5 \
-      --features node_features \
+      --features X \
       --clip 0.001 \
       --L 2 \
       --output_dim 6 \

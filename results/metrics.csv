@@ -11,3 +11,5 @@ linear,equilibrium,1000,200,123,rgg,2.0,0.5,X,0.001,2,6,2.322,0.341
 linear,simple,1000,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.006,0.029
 linear,equilibrium,1000,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.982,0.473
 
+linear,simple,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.007,0.024
+linear,undir,1000,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.982,0.473

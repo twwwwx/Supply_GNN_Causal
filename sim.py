@@ -9,7 +9,7 @@ import numpy as np
 from tqdm import tqdm
 
 from dGC.baseline import estimate_tau_hat_dr_linear
-from dGC.gen_data import sample_data, sample_data_simple
+from dGC.gen_data import sample_data_undir, sample_data_simple, sample_data_dir
 
 # Keep repeated PyG import warnings compact in logs.
 warnings.filterwarnings("once", category=UserWarning, module=r"torch_geometric")
@@ -42,9 +42,9 @@ def append_row(csv_path: Path, row: dict) -> None:
 
 
 def draw_data(DGP: str, n: int, seed: int, gen_graph: str, tau_true: float, p_treat: float):
-    if DGP == "equilibrium":
-        return sample_data(sample_size=n, seed=seed, graph_model=gen_graph)
-    if DGP == "simple":
+    if DGP == "undir":
+        return sample_data_undir(sample_size=n, seed=seed, graph_model=gen_graph)
+    if DGP == "simple_undir":
         return sample_data_simple(
             sample_size=n,
             seed=seed,
@@ -52,14 +52,20 @@ def draw_data(DGP: str, n: int, seed: int, gen_graph: str, tau_true: float, p_tr
             tau=tau_true,
             p_treat=p_treat,
         )
-    raise ValueError("DGP must be one of: equilibrium, simple.")
+    if DGP == "dir":
+        return sample_data_dir(
+            sample_size=n,
+            seed=seed,
+            graph_model=gen_graph,
+        )
+    raise ValueError("DGP must be one of: undir, simple_undir, dir.")
 
 
 def tau_hat_from_model(model: str, draw: dict, features: str, clip: float, L: int, output_dim: int, seed: int) -> float:
     if model == "linear":
         fit = estimate_tau_hat_dr_linear(draw, feature_key=features, clip=clip)
         return float(fit["tau_hat"])
-    if model == "gnn":
+    if model in {"gnn", "dirgnn"}:
         from dGC.ate import tau_hat_from_gnn
 
         return float(
@@ -70,15 +76,16 @@ def tau_hat_from_model(model: str, draw: dict, features: str, clip: float, L: in
                 num_layers=L,
                 output_dim=output_dim,
                 seed=seed,
+                directed=(model == "dirgnn"),
             )
         )
-    raise ValueError("model must be one of: linear, gnn.")
+    raise ValueError("model must be one of: linear, gnn, dirgnn.")
 
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("--model", type=str, default="linear", help="linear or gnn")
-    parser.add_argument("--DGP", type=str, default="simple", help="equilibrium or simple")
+    parser.add_argument("--model", type=str, default="linear", help="linear, gnn, or dirgnn")
+    parser.add_argument("--DGP", type=str, default="simple_undir", help="undir, simple_undir, or dir")
     parser.add_argument("--num_runs", type=int, default=100)
     parser.add_argument("--n", type=int, default=200)
     parser.add_argument("--seed", type=int, default=123)
@@ -95,12 +102,12 @@ def main():
     model = args.model.lower()
     DGP = args.DGP.lower()
 
-    if model not in {"linear", "gnn"}:
-        raise ValueError("--model must be linear or gnn.")
-    if DGP not in {"equilibrium", "simple"}:
-        raise ValueError("--DGP must be equilibrium or simple.")
+    if model not in {"linear", "gnn", "dirgnn"}:
+        raise ValueError("--model must be linear, gnn, or dirgnn.")
+    if DGP not in {"undir", "simple_undir", "dir"}:
+        raise ValueError("--DGP must be undir, simple_undir, or dir.")
 
-    if model == "gnn" and args.features == "X":
+    if model in {"gnn", "dirgnn"} and args.features == "X":
         features = "node_features"
     else:
         features = args.features
@@ -113,8 +120,8 @@ def main():
     tau_hats = []
     start_time = time.time()
     run_iter = range(args.num_runs)
-    if model == "gnn":
-        run_iter = tqdm(run_iter, total=args.num_runs, desc="gnn-eval")
+    if model in {"gnn", "dirgnn"}:
+        run_iter = tqdm(run_iter, total=args.num_runs, desc=f"{model}-eval")
 
     for i in run_iter:
         draw_seed = args.seed + i
