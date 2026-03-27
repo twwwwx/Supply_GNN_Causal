@@ -32,7 +32,18 @@ def estimate_tau_hat_dr_linear(data, feature_key="X", outcome_key="Y", treatment
     2) Propensity model D~X
     3) DR aggregation to tau_hat
     """
-    X = data[feature_key]
+    if feature_key == "node_features":
+        x_raw = np.asarray(data["X"], dtype=float).squeeze()
+        if x_raw.ndim != 1:
+            x_raw = x_raw.reshape(-1)
+        a = np.asarray(data["adjacency"], dtype=float)
+        degree = np.sum(a, axis=1)
+        denom = np.where(degree > 0.0, degree, 1.0)
+        a_norm = a / denom[:, None]
+        neighbor_x = a_norm @ x_raw
+        X = np.column_stack([x_raw, degree, neighbor_x]).astype(float)
+    else:
+        X = data[feature_key]
     Y = data[outcome_key]
     D = data[treatment_key] if treatment_key in data else data["T"]
 

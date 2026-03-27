@@ -1,3 +1,13 @@
-run_id,sample_size,model_name,intercept,beta,beta2,metric_name,metric_value
-1,30,linear_v1,0.5,1.2,0.0,mse,2.109123
-1,30,quadratic_v1,0.2,1.0,0.15,mse,2.667079
+model,DGP,num_runs,n,seed,gen_graph,tau_true,p_treat,features,clip,L,output_dim,true_tau,mean_tau_hat,mse_tau_hat
+linear,simple,100,200,123,rgg,2.0,0.5,X,0.001,2,6,2.0,1.956627683853273,0.09229924216937245
+linear,simple,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,2.007,0.024
+gnn,simple,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,1.996,0.041
+
+linear,equilibrium,100,200,123,rgg,2.0,0.5,X,0.001,2,6,2.0,2.347,0.366
+linear,equilibrium,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,1.959,0.304
+gnn,equilibrium,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,2.004,0.118
+linear,simple,1000,200,123,rgg,2.0,0.5,X,0.001,2,6,1.995,0.112
+linear,equilibrium,1000,200,123,rgg,2.0,0.5,X,0.001,2,6,2.322,0.341
+linear,simple,1000,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.006,0.029
+linear,equilibrium,1000,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.982,0.473
+

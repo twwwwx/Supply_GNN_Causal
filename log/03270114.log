@@ -1,0 +1,13 @@
+/storage/home/wkt5100/.local/lib/python3.10/site-packages/torch_geometric/__init__.py:4: UserWarning: An issue occurred while importing 'pyg-lib'. Disabling its usage. Stacktrace: /usr/lib64/libm.so.6: version `GLIBC_2.29' not found (required by /storage/home/wkt5100/.local/lib/python3.10/site-packages/libpyg.so)
+  import torch_geometric.typing
+/storage/home/wkt5100/.local/lib/python3.10/site-packages/torch_geometric/__init__.py:4: UserWarning: An issue occurred while importing 'torch-sparse'. Disabling its usage. Stacktrace: /usr/lib64/libm.so.6: version `GLIBC_2.29' not found (required by /storage/home/wkt5100/.local/lib/python3.10/site-packages/libpyg.so)
+  import torch_geometric.typing
+saved n=200 model=linear DGP=simple mean_tau_hat=1.995 mse_tau_hat=0.112
+Wrote 1 row to /storage/work/wkt5100/Supply_GNN_Causal/results/metrics.csv
+/storage/home/wkt5100/.local/lib/python3.10/site-packages/torch_geometric/__init__.py:4: UserWarning: An issue occurred while importing 'pyg-lib'. Disabling its usage. Stacktrace: /usr/lib64/libm.so.6: version `GLIBC_2.29' not found (required by /storage/home/wkt5100/.local/lib/python3.10/site-packages/libpyg.so)
+  import torch_geometric.typing
+/storage/home/wkt5100/.local/lib/python3.10/site-packages/torch_geometric/__init__.py:4: UserWarning: An issue occurred while importing 'torch-sparse'. Disabling its usage. Stacktrace: /usr/lib64/libm.so.6: version `GLIBC_2.29' not found (required by /storage/home/wkt5100/.local/lib/python3.10/site-packages/libpyg.so)
+  import torch_geometric.typing
+saved n=200 model=linear DGP=equilibrium mean_tau_hat=2.322 mse_tau_hat=0.341
+Wrote 1 row to /storage/work/wkt5100/Supply_GNN_Causal/results/metrics.csv
+Job ID: 50260350

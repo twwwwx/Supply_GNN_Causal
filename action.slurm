@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=sim          # Job name
-#SBATCH --time=0:10:00             # Time limit hrs:min:sec
+#SBATCH --time=2:00:00          # Time limit hrs:min:sec
 #SBATCH --account=one_sc_default
 #SBATCH --output=/dev/null      # Prevent SLURM from handling output directly
 #SBATCH --mem=1G                # Memory demand (e.g., 4GB)
@@ -9,12 +9,31 @@
 log_name=$(date +"%m%d%H%M")
 log_file="log/${log_name}.log"
 
-module load python
+module load anaconda
+conda activate deep_learning
 
 # Redirect all output to the log file
 exec > "$log_file" 2>&1
 
-python test/test_load.py
+# Run all model/DGP combos in one job (one row per command appended to metrics.csv)
+for model in gnn; do
+  for DGP in simple equilibrium; do
+    python sim.py \
+      --model "$model" \
+      --DGP "$DGP" \
+      --num_runs 1000 \
+      --n 200 \
+      --seed 123 \
+      --gen_graph rgg \
+      --tau_true 2.0 \
+      --p_treat 0.5 \
+      --features node_features \
+      --clip 0.001 \
+      --L 2 \
+      --output_dim 6 \
+      --metrics_csv results/metrics.csv
+  done
+done
+
 # Output the job number to the log file
 echo "Job ID: ${SLURM_JOB_ID}"
-
