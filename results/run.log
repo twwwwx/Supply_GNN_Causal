@@ -1,0 +1,20 @@
+device_config model=dirgnn use_gpu_arg=1 cuda_available=1 using_device=cuda
+dirgnn-eval:   0%|          | 0/2 [00:00<?, ?it/s]/storage/home/wkt5100/.local/lib/python3.10/site-packages/torch_geometric/__init__.py:4: UserWarning: An issue occurred while importing 'pyg-lib'. Disabling its usage. Stacktrace: /usr/lib64/libm.so.6: version `GLIBC_2.29' not found (required by /storage/home/wkt5100/.local/lib/python3.10/site-packages/libpyg.so)
+  import torch_geometric.typing
+/storage/home/wkt5100/.local/lib/python3.10/site-packages/torch_geometric/__init__.py:4: UserWarning: An issue occurred while importing 'torch-sparse'. Disabling its usage. Stacktrace: /usr/lib64/libm.so.6: version `GLIBC_2.29' not found (required by /storage/home/wkt5100/.local/lib/python3.10/site-packages/libpyg.so)
+  import torch_geometric.typing
+dirgnn-eval:   0%|          | 0/2 [00:30<?, ?it/s]
+Traceback (most recent call last):
+  File "/storage/work/wkt5100/Supply_GNN_Causal/sim.py", line 285, in <module>
+    main()
+  File "/storage/work/wkt5100/Supply_GNN_Causal/sim.py", line 205, in main
+    fit = estimate_from_model(
+  File "/storage/work/wkt5100/Supply_GNN_Causal/sim.py", line 94, in estimate_from_model
+    fit = tau_hat_and_se_from_gnn(
+  File "/storage/work/wkt5100/Supply_GNN_Causal/src/ate.py", line 130, in tau_hat_and_se_from_gnn
+    fit = _dr_components_from_gnn(
+  File "/storage/work/wkt5100/Supply_GNN_Causal/src/ate.py", line 40, in _dr_components_from_gnn
+    reg_fn(
+  File "/storage/work/wkt5100/Supply_GNN_Causal/src/GNN.py", line 225, in GNN_reg_dir
+    sample_t = torch.as_tensor(sample, dtype=torch.bool, device=device)
+KeyboardInterrupt

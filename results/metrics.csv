@@ -1,31 +1,10 @@
-model,DGP,num_runs,n,seed,gen_graph,tau_true,p_treat,features,clip,L,output_dim,true_tau,mean_tau_hat,mse_tau_hat
-linear,simple_undir,100,200,123,rgg,2.0,0.5,X,0.001,2,6,2.0,1.956627683853273,0.09229924216937245
-linear,simple_undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,2.007,0.024
-gnn,simple_undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,1.996,0.041
+model,DGP,num_runs,n,seed,gen_graph,tau_true,p_treat,features,clip,L,output_dim,variance_type,variance_method,bandwidth,MSE,se_tau_hat_MC,mean_sigma_hat,cover_rate
+gnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.118,0.034454,0.524698,0.524698
+dirgnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,directed,dir_max,2.0,0.1,0.031537,0.524099,0.524099
+gnn,dir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.829,0.091159,0.61261,0.61261
+dirgnn,dir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,directed,dir_max,2.14,0.565,0.075561,0.561157,0.561157
+dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.011 (0.007723),0.095516,0.24838,1.0
 
-linear,undir,100,200,123,rgg,2.0,0.5,X,0.001,2,6,2.0,2.347,0.366
-linear,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,1.959,0.304
-gnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,2.004,0.118
-linear,simple_undir,1000,200,123,rgg,2.0,0.5,X,0.001,2,6,1.995,0.112
-linear,undir,1000,200,123,rgg,2.0,0.5,X,0.001,2,6,2.322,0.341
-linear,simple_undir,1000,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.006,0.029
-linear,undir,1000,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.982,0.473
-
-linear,simple_undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.007,0.024
-linear,undir,1000,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.982,0.473
-
-dirgnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.045,0.1
-gnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.0,2.004,0.118
-
-
-linear,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.959,0.304
-dirgnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.045,0.1
-gnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.004,0.118
-
-linear,simple_undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.007,0.024
-gnn,simple_undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.996,0.041
-dirgnn,simple_undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.992,0.038
-
-linear,dir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,3.296,5.199
-gnn,dir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,1.921,0.829
-dirgnn,dir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,2.009,0.565
+dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.018 (0.011253),0.125863,0.213348,1.0
+dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.029 (0.007161),0.167768,0.209114,1.0
+dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.018 (0.011253),0.125863,0.213348,1.0

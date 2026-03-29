@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=sim          # Job name
+#SBATCH --job-name=sim_py          # Job name
 #SBATCH --time=2:30:00          # Time limit hrs:min:sec
 #SBATCH --account=one_sc_default
 #SBATCH --output=/dev/null      # Prevent SLURM from handling output directly
@@ -16,8 +16,8 @@ conda activate deep_learning
 exec > "$log_file" 2>&1
 
 # Run all model/DGP combos in one job (one row per command appended to metrics.csv)
-for model in linear gnn dirgnn; do
-  for DGP in undir simple_undir dir; do
+for model in gnn; do
+  for DGP in dir undir; do
     python sim.py \
       --model "$model" \
       --DGP "$DGP" \
@@ -31,7 +31,9 @@ for model in linear gnn dirgnn; do
       --clip 0.001 \
       --L 2 \
       --output_dim 6 \
-      --metrics_csv results/metrics.csv
+      --metrics_csv results/metrics.csv \
+      --variance_type skeleton \
+      --variance_method max 
   done
 done
 

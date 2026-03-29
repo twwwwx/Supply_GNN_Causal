@@ -34,10 +34,10 @@ def append_row(csv_path: Path, row: dict) -> None:
         "variance_type",
         "variance_method",
         "bandwidth",
-        "mean_tau_hat",
-        "mse_tau_hat",
-        "se_tau_hat",
-        "mean_se_hat",
+        "MSE",
+        "se_tau_hat_MC",
+        "mean_sigma_hat",
+        "cover_rate",
     ]
     with csv_path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -77,6 +77,7 @@ def estimate_from_model(
     variance_type: str,
     variance_method: str | None,
     bandwidth: int | None,
+    use_gpu: bool,
 ) -> dict:
     if model == "linear":
         fit = estimate_tau_hat_dr_linear(draw, feature_key=features, clip=clip)
@@ -98,6 +99,7 @@ def estimate_from_model(
             output_dim=output_dim,
             seed=seed,
             directed=(model == "dirgnn"),
+            use_gpu=use_gpu,
             variance_type=variance_type,
             variance_method=variance_method,
             bandwidth=bandwidth,
@@ -129,6 +131,7 @@ def main():
     parser.add_argument("--variance_type", type=str, default="skeleton", help="iid, skeleton, or directed")
     parser.add_argument("--variance_method", type=str, default="", help="Kernel method inside variance type")
     parser.add_argument("--bandwidth", type=int, default=None, help="Optional fixed bandwidth")
+    parser.add_argument("--use_gpu", type=int, default=1, help="1 to allow CUDA for GNN models, 0 to force CPU")
     parser.add_argument("--metrics_csv", type=str, default="results/metrics.csv")
     args = parser.parse_args()
 
@@ -143,6 +146,28 @@ def main():
     if variance_type not in {"iid", "skeleton", "directed"}:
         raise ValueError("--variance_type must be iid, skeleton, or directed.")
     variance_method = args.variance_method.strip() or None
+    use_gpu = bool(int(args.use_gpu))
+
+    if model == "gnn" and variance_type == "directed":
+        warnings.warn(
+            "model='gnn' is undirected; variance_type='directed' is overridden to 'skeleton'.",
+            UserWarning,
+        )
+        variance_type = "skeleton"
+        if variance_method is None or variance_method.startswith("dir"):
+            variance_method = "max"
+
+    cuda_available = False
+    actual_device = "cpu"
+    if model in {"gnn", "dirgnn"}:
+        import torch
+
+        cuda_available = bool(torch.cuda.is_available())
+        actual_device = "cuda" if (use_gpu and cuda_available) else "cpu"
+    print(
+        f"device_config model={model} use_gpu_arg={int(use_gpu)} "
+        f"cuda_available={int(cuda_available)} using_device={actual_device}"
+    )
 
     features_arg = args.features
     if features_arg == "nodes":
@@ -160,6 +185,7 @@ def main():
 
     tau_hats = []
     se_hats = []
+    cover_hits = []
     bw_hats = []
     start_time = time.time()
     run_iter = range(args.num_runs)
@@ -187,21 +213,32 @@ def main():
             variance_type=variance_type,
             variance_method=variance_method,
             bandwidth=args.bandwidth,
+            use_gpu=use_gpu,
         )
         tau_hats.append(float(fit["tau_hat"]))
         if fit["se_hat"] is not None:
-            se_hats.append(float(fit["se_hat"]))
+            se_hat_i = float(fit["se_hat"])
+            se_hats.append(se_hat_i)
+            tau_hat_i = float(fit["tau_hat"])
+            ci_half_width = 1.96 * se_hat_i
+            cover_hits.append(int((tau_hat_i - ci_half_width) <= float(args.tau_true) <= (tau_hat_i + ci_half_width)))
         if fit["bandwidth"] is not None:
             bw_hats.append(float(fit["bandwidth"]))
 
     tau_hats_arr = np.asarray(tau_hats, dtype=float)
-    mse_tau_hat = round(float(np.mean((tau_hats_arr - float(args.tau_true)) ** 2)), 3)
+    sq_err = (tau_hats_arr - float(args.tau_true)) ** 2
+    mse_tau_hat = round(float(np.mean(sq_err)), 3)
+    if int(args.num_runs) > 1:
+        se_mse_tau_hat = float(np.std(sq_err, ddof=1) / np.sqrt(float(args.num_runs)))
+    else:
+        se_mse_tau_hat = 0.0
     mean_tau_hat = round(float(np.mean(tau_hats_arr)), 3)
     if int(args.num_runs) > 1:
         se_tau_hat = float(np.std(tau_hats_arr, ddof=1) / np.sqrt(float(args.num_runs)))
     else:
         se_tau_hat = 0.0
     mean_se_hat = float(np.mean(np.asarray(se_hats, dtype=float))) if se_hats else 0.0
+    cover_rate = float(np.mean(np.asarray(cover_hits, dtype=float))) if cover_hits else 0.0
     mean_bw_hat = float(np.mean(np.asarray(bw_hats, dtype=float))) if bw_hats else 0.0
     variance_type_out = variance_type if model in {"gnn", "dirgnn"} else "none"
     variance_method_out = (variance_method or "") if model in {"gnn", "dirgnn"} else ""
@@ -225,16 +262,18 @@ def main():
             "variance_type": variance_type_out,
             "variance_method": variance_method_out,
             "bandwidth": bandwidth_out,
-            "mean_tau_hat": mean_tau_hat,
-            "mse_tau_hat": mse_tau_hat,
-            "se_tau_hat": round(se_tau_hat, 6),
-            "mean_se_hat": round(mean_se_hat, 6),
+            "MSE": f"{mse_tau_hat:.3f} ({se_mse_tau_hat:.6f})",
+            "se_tau_hat_MC": round(se_tau_hat, 6),
+            "mean_sigma_hat": round(mean_se_hat, 6),
+            "cover_rate": round(cover_rate, 6),
         },
     )
     print(
         f"saved n={args.n} model={model} DGP={DGP} "
         f"mean_tau_hat={mean_tau_hat:.3f} mse_tau_hat={mse_tau_hat:.3f} "
+        f"se_mse_tau_hat={se_mse_tau_hat:.6f} "
         f"se_tau_hat={se_tau_hat:.6f} mean_se_hat={mean_se_hat:.6f} "
+        f"cover_rate={cover_rate:.6f} "
         f"var_type={variance_type_out} var_method={variance_method_out} bw={bandwidth_out}"
     )
     elapsed = time.time() - start_time

@@ -1,4 +1,5 @@
 import numpy as np
+import warnings
 
 try:
     from .GNN import GNN_reg, GNN_reg_dir
@@ -20,6 +21,7 @@ def _dr_components_from_gnn(
     output_dim: int = 6,
     seed: int = 0,
     directed: bool = False,
+    use_gpu: bool = True,
 ) -> dict:
     y = np.asarray(data[outcome_key], dtype=float).squeeze()
     d = np.asarray(data[treatment_key], dtype=float).squeeze()
@@ -43,6 +45,7 @@ def _dr_components_from_gnn(
             num_layers=num_layers,
             output_dim=output_dim,
             seed=seed,
+            use_gpu=use_gpu,
         ),
         dtype=float,
     )
@@ -55,6 +58,7 @@ def _dr_components_from_gnn(
             num_layers=num_layers,
             output_dim=output_dim,
             seed=seed + 1,
+            use_gpu=use_gpu,
         ),
         dtype=float,
     )
@@ -66,6 +70,7 @@ def _dr_components_from_gnn(
             num_layers=num_layers,
             output_dim=output_dim,
             seed=seed + 2,
+            use_gpu=use_gpu,
         ),
         dtype=float,
     )
@@ -90,6 +95,7 @@ def tau_hat_from_gnn(
     output_dim: int = 6,
     seed: int = 0,
     directed: bool = False,
+    use_gpu: bool = True,
 ) -> float:
     fit = _dr_components_from_gnn(
         data=data,
@@ -101,6 +107,7 @@ def tau_hat_from_gnn(
         output_dim=output_dim,
         seed=seed,
         directed=directed,
+        use_gpu=use_gpu,
     )
     return float(fit["tau_hat"])
 
@@ -115,6 +122,7 @@ def tau_hat_and_se_from_gnn(
     output_dim: int = 6,
     seed: int = 0,
     directed: bool = False,
+    use_gpu: bool = True,
     variance_type: str = "skeleton",
     variance_method: str | None = None,
     bandwidth: int | None = None,
@@ -129,9 +137,19 @@ def tau_hat_and_se_from_gnn(
         output_dim=output_dim,
         seed=seed,
         directed=directed,
+        use_gpu=use_gpu,
     )
 
     vtype = variance_type.lower()
+    if (not directed) and vtype == "directed":
+        warnings.warn(
+            "variance_type='directed' was requested with undirected GNN nuisance fits "
+            "(directed=False). Falling back to variance_type='skeleton'.",
+            UserWarning,
+        )
+        vtype = "skeleton"
+        if variance_method is None or str(variance_method).startswith("dir"):
+            variance_method = "max"
     psi = np.asarray(fit["psi"], dtype=float)
     n = float(psi.size)
     if vtype == "iid":

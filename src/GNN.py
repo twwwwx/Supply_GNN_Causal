@@ -154,8 +154,10 @@ def GNN_reg(
     output_dim=6,
     sample=False,
     seed=0,
+    use_gpu=True,
 ):
     """Nonparametric regression using GNN."""
+    device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
     Y = np.asarray(Y)
     Y = np.squeeze(Y)
     X = np.asarray(X, dtype=float)
@@ -165,6 +167,7 @@ def GNN_reg(
 
     if not isinstance(sample, np.ndarray):
         sample = np.ones(n, dtype=bool)
+    sample_t = torch.as_tensor(sample, dtype=torch.bool, device=device)
     binary_output = np.issubdtype(Y.dtype, np.integer)
 
     edgelist = _to_edge_index(A, n=n)
@@ -177,15 +180,17 @@ def GNN_reg(
     d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
     deg = torch.bincount(d, minlength=int(d.max()) + 1 if d.numel() > 0 else 1)
     model = GNN(data.num_node_features, num_layers, output_dim, seed, deg_hist=deg)
+    data = data.to(device)
+    model = model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.BCEWithLogitsLoss() if binary_output else torch.nn.MSELoss()
-    old_loss, _ = train(data, model, criterion, optimizer, sample)
+    old_loss, _ = train(data, model, criterion, optimizer, sample_t)
     gain = 10.0
     iters = 1
     while gain > 1e-4:
         iters += 1
-        loss, _ = train(data, model, criterion, optimizer, sample)
+        loss, _ = train(data, model, criterion, optimizer, sample_t)
         gain = abs(float(old_loss.item()) - float(loss.item()))
         old_loss = loss
         if iters >= 10000:
@@ -193,7 +198,7 @@ def GNN_reg(
             break
 
     out_final = torch.sigmoid(model(data)) if binary_output else model(data)
-    return out_final.detach().numpy()
+    return out_final.detach().cpu().numpy()
 
 
 def GNN_reg_dir(
@@ -204,8 +209,10 @@ def GNN_reg_dir(
     output_dim=6,
     sample=False,
     seed=0,
+    use_gpu=True,
 ):
     """Nonparametric regression using a directed dual-channel GNN."""
+    device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
     Y = np.asarray(Y)
     Y = np.squeeze(Y)
     X = np.asarray(X, dtype=float)
@@ -215,6 +222,7 @@ def GNN_reg_dir(
 
     if not isinstance(sample, np.ndarray):
         sample = np.ones(n, dtype=bool)
+    sample_t = torch.as_tensor(sample, dtype=torch.bool, device=device)
     binary_output = np.issubdtype(Y.dtype, np.integer)
 
     edge_index_in, edge_index_out = _to_directed_edge_indices(A, n=n)
@@ -237,15 +245,17 @@ def GNN_reg_dir(
         deg_hist_in=deg_in,
         deg_hist_out=deg_out,
     )
+    data = data.to(device)
+    model = model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.BCEWithLogitsLoss() if binary_output else torch.nn.MSELoss()
-    old_loss, _ = train(data, model, criterion, optimizer, sample)
+    old_loss, _ = train(data, model, criterion, optimizer, sample_t)
     gain = 10.0
     iters = 1
     while gain > 1e-4:
         iters += 1
-        loss, _ = train(data, model, criterion, optimizer, sample)
+        loss, _ = train(data, model, criterion, optimizer, sample_t)
         gain = abs(float(old_loss.item()) - float(loss.item()))
         old_loss = loss
         if iters >= 10000:
@@ -253,7 +263,7 @@ def GNN_reg_dir(
             break
 
     out_final = torch.sigmoid(model(data)) if binary_output else model(data)
-    return out_final.detach().numpy()
+    return out_final.detach().cpu().numpy()
 
 
 # ==========
