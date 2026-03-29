@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/storage/work/wkt5100/Supply_GNN_Causal/sim.py", line 285, in <module>
+    main()
+  File "/storage/work/wkt5100/Supply_GNN_Causal/sim.py", line 142, in main
+    raise ValueError("--model must be linear, gnn, or dirgnn.")
+ValueError: --model must be linear, gnn, or dirgnn.
+Traceback (most recent call last):
+  File "/storage/work/wkt5100/Supply_GNN_Causal/sim.py", line 285, in <module>
+    main()
+  File "/storage/work/wkt5100/Supply_GNN_Causal/sim.py", line 142, in main
+    raise ValueError("--model must be linear, gnn, or dirgnn.")
+ValueError: --model must be linear, gnn, or dirgnn.
+Job ID: 50407847

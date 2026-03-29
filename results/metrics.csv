@@ -8,3 +8,7 @@ dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.011
 dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.018 (0.011253),0.125863,0.213348,1.0
 dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.029 (0.007161),0.167768,0.209114,1.0
 dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.018 (0.011253),0.125863,0.213348,1.0
+
+gnn,dir,100,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.022 (0.003192),0.014771,0.230017,0.99
+dirgnn,dir,100,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.029 (0.004933),0.017094,0.232621,1.0
+gnn,undir,100,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.010 (0.001476),0.009553,0.213126,1.0
