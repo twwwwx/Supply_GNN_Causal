@@ -16,5 +16,9 @@ dirgnn,undir,100,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0
 
 gnn,dir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.019 (0.002923),0.013935,0.270679,1.0
 dirgnn,dir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.018 (0.003046),0.013302,0.268364,1.0
-gnn,undir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.007 (0.001098),0.007877,0.259271,1.0
-dirgnn,undir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.009 (0.001552),0.008678,0.260354,1.0
+
+(Below are the heterophilic generation)
+gnn,dir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.024 (0.003139),0.015402,0.270905,1.0
+dirgnn,dir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.019 (0.002526),0.013628,0.27218,1.0
+gnn,undir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.006 (0.001170),0.007516,0.258742,1.0
+dirgnn,undir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.006 (0.000966),0.00716,0.258638,1.0

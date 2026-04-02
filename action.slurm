@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=sim_gnn          # Job name
-#SBATCH --time=2:30:00          # Time limit hrs:min:sec
+#SBATCH --time=1:30:00          # Time limit hrs:min:sec
 #SBATCH --account=open
 #SBATCH --partition=standard
 #SBATCH --output=/dev/null      # Prevent SLURM from handling output directly
@@ -18,7 +18,7 @@ conda activate tensorflow
 exec > "$log_file" 2>&1
 
 # Run all model/DGP combos in one job (one row per command appended to metrics.csv)
-for DGP in dir undir; do
+for DGP in dir; do
   for model in gnn dirgnn; do
     python sim.py \
       --model "$model" \
@@ -34,8 +34,7 @@ for DGP in dir undir; do
       --L 2 \
       --output_dim 6 \
       --metrics_csv results/metrics.csv \
-      --variance_type skeleton \
-      --variance_method max \
+      --variance_type directed \
       --use_gpu 1
   done
 done

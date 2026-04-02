@@ -151,6 +151,45 @@ def _gen_er_dir(n: int, rng: np.random.Generator, p_bidirected: float) -> np.nda
     return _orient_undirected_edges(_gen_er(n, rng), rng, p_bidirected)
 
 
+def gen_heterophilic_labels(
+    adjacency: np.ndarray,
+    rng: np.random.Generator,
+    support: np.ndarray = X_SUPPORT,
+) -> np.ndarray:
+    """Sample node labels by pairing connected nodes with different values when possible."""
+    a = np.asarray(adjacency)
+    if a.ndim != 2 or a.shape[0] != a.shape[1]:
+        raise ValueError("Adjacency must be square.")
+
+    support = np.asarray(support, dtype=float)
+    if np.unique(support).size < 2:
+        raise ValueError("support must contain at least two distinct values.")
+
+    n = a.shape[0]
+    x = np.empty(n, dtype=float)
+    assigned = np.zeros(n, dtype=bool)
+
+    skeleton = np.logical_or(a != 0, a.T != 0)
+    np.fill_diagonal(skeleton, False)
+    pairs = np.argwhere(np.triu(skeleton, 1) > 0).astype(np.int64)
+    if pairs.size > 0:
+        rng.shuffle(pairs, axis=0)
+        for i, j in pairs:
+            if assigned[i] or assigned[j]:
+                continue
+            pair_vals = rng.choice(support, size=2, replace=False)
+            x[i] = pair_vals[0]
+            x[j] = pair_vals[1]
+            assigned[i] = True
+            assigned[j] = True
+
+    remaining = np.where(~assigned)[0]
+    if remaining.size > 0:
+        x[remaining] = rng.choice(support, size=remaining.size, replace=True)
+
+    return x
+
+
 def sample_data_undir(
     sample_size: int,
     seed: int,
@@ -174,7 +213,7 @@ def sample_data_undir(
     _check_symmetric_adjacency(adjacency)
 
     weights, degree = _row_normalize(adjacency)
-    x = rng.choice(X_SUPPORT, size=sample_size, replace=True)
+    x = gen_heterophilic_labels(adjacency, rng)
     nu = rng.normal(0.0, 1.0, size=sample_size)
     u = rng.normal(0.0, 1.0, size=sample_size)
     d0 = (_network_index(np.zeros(sample_size, dtype=float), nu, x, weights, THETA_D) > 0.0).astype(int)
@@ -243,7 +282,7 @@ def sample_data_dir(
     weights_out, out_degree = _row_normalize(adjacency)
     weights_in, in_degree = _row_normalize(adjacency.T)
 
-    x = rng.choice(X_SUPPORT, size=sample_size, replace=True)
+    x = gen_heterophilic_labels(adjacency, rng)
     nu = rng.normal(0.0, 1.0, size=sample_size)
     u = rng.normal(0.0, 1.0, size=sample_size)
     d0 = (
@@ -339,7 +378,7 @@ def sample_data_simple(
     _check_symmetric_adjacency(adjacency)
 
     weights, degree = _row_normalize(adjacency)
-    x = rng.choice(X_SUPPORT, size=sample_size, replace=True)
+    x = gen_heterophilic_labels(adjacency, rng)
     eps = rng.normal(0.0, 1.0, size=sample_size)
     d = rng.binomial(1, p_treat, size=sample_size).astype(int)  # Bernoulli i.i.d.
 
@@ -381,5 +420,21 @@ def sample_data_simple(
 
 
 if __name__ == "__main__":
-    draw = sample_data_undir(sample_size=500, seed=123, graph_model="rgg")
-    print(f"treated_proportion={float(np.mean(draw['D'])):.6f}")
+    draw = sample_data_dir(sample_size=2000, seed=123, graph_model="rgg")
+    d = np.asarray(draw["D"], dtype=float)
+    w_in = np.asarray(draw["row_normalized_adjacency_in"], dtype=float)
+    w_out = np.asarray(draw["row_normalized_adjacency_out"], dtype=float)
+
+    treated_prop = float(np.mean(d))
+    treated_prop_in_nodes = w_in @ d
+    treated_prop_out_nodes = w_out @ d
+
+    print(f"treated_proportion={treated_prop:.6f}")
+    print(f"in_nodes_treated_prop_mean={float(np.mean(treated_prop_in_nodes)):.6f}")
+    print(f"in_nodes_treated_prop_median={float(np.median(treated_prop_in_nodes)):.6f}")
+    print(f"out_nodes_treated_prop_mean={float(np.mean(treated_prop_out_nodes)):.6f}")
+    print(f"out_nodes_treated_prop_median={float(np.median(treated_prop_out_nodes)):.6f}")
+    print(f"prop_rho_in_eq_1={float(np.mean(treated_prop_in_nodes == 1.0)):.6f}")
+    print(f"prop_rho_in_eq_0={float(np.mean(treated_prop_in_nodes == 0.0)):.6f}")
+    print(f"prop_rho_out_eq_1={float(np.mean(treated_prop_out_nodes == 1.0)):.6f}")
+    print(f"prop_rho_out_eq_0={float(np.mean(treated_prop_out_nodes == 0.0)):.6f}")

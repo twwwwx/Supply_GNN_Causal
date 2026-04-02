@@ -36,13 +36,19 @@ Detailed args:
   - `iid`: iid-style variance.
   - `skeleton`: undirected/symmetrized network variance.
   - `directed`: directed network variance.
-- `--variance_method` (str, default empty): method under chosen `variance_type` (for example `max`, `dir_max`).
+- `--variance_method` (str, default empty): method under chosen `variance_type`.
+  - If empty, defaults are: `iid -> iid`, `skeleton -> max`, `directed -> dir_max`.
+- Valid `variance_type` / `variance_method` pairs:
+  - `iid`: method is effectively fixed to `iid` (argument is ignored).
+  - `skeleton`: `u`, `pd`, `max`.
+  - `directed`: `in_max`, `out_max`, `dir_max`, `dir_avg`.
 - `--bandwidth` (int or omitted): fixed bandwidth for network variance; omitted means auto-selected.
 - `--use_gpu` (int, default `1`): for GNN models, `1` allows CUDA when available and `0` forces CPU.
 - `--metrics_csv` (path): output CSV file. Each invocation appends one row.
 
 Notes:
 - If `--model gnn` and `--variance_type directed`, code warns and falls back to `skeleton`.
+  - In that fallback, if `--variance_method` is empty or starts with `dir`, it is reset to `max`.
 - Device choice is printed to stdout (`use_gpu_arg`, CUDA availability, and actual device), but not saved in CSV.
 
 Each run appends one row to `metrics_csv` with columns:
