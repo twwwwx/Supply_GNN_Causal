@@ -17,8 +17,8 @@ conda activate tensorflow
 # Redirect all output to the log file
 exec > "$log_file" 2>&1
 
-# Run all model/DGP combos in one job (one row per command appended to metrics.csv)
-for DGP in dir; do
+# Run both GNN variants for the spillover DGP (1 wide row per command in metrics.csv)
+for DGP in spillover; do
   for model in gnn dirgnn; do
     python sim.py \
       --model "$model" \
@@ -27,8 +27,9 @@ for DGP in dir; do
       --n 2000 \
       --seed 123 \
       --gen_graph er \
-      --tau_true 2.0 \
-      --p_treat 0.5 \
+      --tau_dir_true 2.0 \
+      --tau_in_true 1.0 \
+      --tau_out_true 1.0 \
       --features nodes \
       --clip 0.001 \
       --L 2 \

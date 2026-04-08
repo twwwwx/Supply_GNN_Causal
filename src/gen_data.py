@@ -10,6 +10,7 @@ THETA_D = (-0.5, 1.5, 1.0, -1.0)
 THETA_Y_MANUAL = (0.5, 2.0, 10.0, 1.0)  # (theta_1, theta_2=tau, theta_3, theta_4)
 THETA_D_DIR = (-0.5, 1.0, 0.8, 1.0, -0.6, 1.0)  # (alpha, b_in, b_out, d_in, d_out, gamma)
 THETA_Y_DIR = (0.5, 2.0, 8.0, 4.0, 1.0)  # (theta_1, theta_2=tau, theta_in, theta_out, theta_x)
+THETA_Y_SPILLOVER = (0.5, 8.0, 4.0, 1.0)  # (theta_1, theta_in, theta_out, theta_x)
 
 
 def _matvec(matrix: np.ndarray, vector: np.ndarray) -> np.ndarray:
@@ -341,6 +342,133 @@ def sample_data_dir(
         "tabular_features": tabular_features,
         "theta_d": np.asarray(THETA_D_DIR, dtype=float),
         "theta_y": np.asarray(THETA_Y_DIR, dtype=float),
+        "convergence": {
+            "treatment_iterations": int(treat_iters),
+            "outcome_iterations": 1,
+            "treatment_converged": bool(treat_iters < treatment_max_iter),
+            "outcome_converged": True,
+        },
+        "legacy_rows": np.column_stack([x, y]),
+    }
+
+
+def sample_data_spillover(
+    sample_size: int,
+    seed: int,
+    graph_model: Literal["rgg", "er"] = "rgg",
+    p_bidirected: float = 0.05,
+    tau_dir: float = 2.0,
+    tau_in: float = 1.0,
+    tau_out: float = 1.0,
+    treatment_max_iter: int = 500,
+    outcome_max_iter: int = 2000,
+    outcome_tol: float = 1e-10,
+) -> dict:
+    del outcome_max_iter, outcome_tol
+    if sample_size <= 0:
+        raise ValueError("sample_size must be positive.")
+
+    rng = np.random.default_rng(seed)
+    model = graph_model.lower()
+    if model == "rgg":
+        adjacency = _gen_rgg_dir(sample_size, rng, p_bidirected=p_bidirected)
+    elif model == "er":
+        adjacency = _gen_er_dir(sample_size, rng, p_bidirected=p_bidirected)
+    else:
+        raise ValueError("graph_model must be either 'rgg' or 'er'.")
+
+    weights_out, out_degree = _row_normalize(adjacency)
+    weights_in, in_degree = _row_normalize(adjacency.T)
+
+    x = gen_heterophilic_labels(adjacency, rng)
+    nu = rng.normal(0.0, 1.0, size=sample_size)
+    u = rng.normal(0.0, 1.0, size=sample_size)
+    d0 = (
+        _network_index_dir(
+            np.zeros(sample_size, dtype=float),
+            nu,
+            x,
+            weights_in,
+            weights_out,
+            THETA_D_DIR,
+        )
+        > 0.0
+    ).astype(int)
+    d, treat_iters = _solve_treatment_equilibrium_dir(
+        x=x,
+        nu=nu,
+        weights_in=weights_in,
+        weights_out=weights_out,
+        max_iter=treatment_max_iter,
+    )
+
+    treated_in_count = (adjacency.T @ d.astype(int)).astype(int)
+    treated_out_count = (adjacency @ d.astype(int)).astype(int)
+    rho_in = (treated_in_count > 0).astype(int)
+    rho_out = (treated_out_count > 0).astype(int)
+    t = np.column_stack([d, rho_in, rho_out]).astype(int)
+    state_index = (4 * d + 2 * rho_in + rho_out).astype(int)
+
+    neighbor_x_in = _matvec(weights_in, x)
+    neighbor_x_out = _matvec(weights_out, x)
+    wu_in = _matvec(weights_in, u)
+    wu_out = _matvec(weights_out, u)
+    theta_1, theta_in, theta_out, theta_x = THETA_Y_SPILLOVER
+    y = (
+        theta_1
+        + float(tau_dir) * d
+        + float(tau_in) * rho_in
+        + float(tau_out) * rho_out
+        + theta_in * neighbor_x_in
+        + theta_out * neighbor_x_out
+        - theta_x * x
+        + u
+        + wu_in
+        + wu_out
+    )
+
+    degree_total = in_degree + out_degree
+    node_features = np.column_stack([x, in_degree, out_degree, neighbor_x_in, neighbor_x_out]).astype(float)
+    tabular_features = np.column_stack([x, neighbor_x_in, neighbor_x_out, in_degree, out_degree]).astype(float)
+
+    true_taus = {
+        "tau_dir": float(tau_dir),
+        "tau_in": float(tau_in),
+        "tau_out": float(tau_out),
+        "tau_tot": float(tau_dir + tau_in + tau_out),
+    }
+
+    return {
+        "n": int(sample_size),
+        "seed": int(seed),
+        "graph_model": model,
+        "dgp_variant": "spillover",
+        "true_taus": true_taus,
+        "adjacency": adjacency,
+        "adjacency_skeleton": np.logical_or(adjacency != 0, adjacency.T != 0).astype(np.int8),
+        "row_normalized_adjacency": weights_out,
+        "row_normalized_adjacency_in": weights_in,
+        "row_normalized_adjacency_out": weights_out,
+        "degree": out_degree,
+        "in_degree": in_degree,
+        "out_degree": out_degree,
+        "degree_total": degree_total,
+        "X": x,
+        "epsilon": u,
+        "nu": nu,
+        "D_init": d0,
+        "D": d,
+        "rho_in": rho_in,
+        "rho_out": rho_out,
+        "treated_in_count": treated_in_count,
+        "treated_out_count": treated_out_count,
+        "T": t,
+        "state_index": state_index,
+        "Y": y,
+        "node_features": node_features,
+        "tabular_features": tabular_features,
+        "theta_d": np.asarray(THETA_D_DIR, dtype=float),
+        "theta_y": np.asarray([theta_1, tau_dir, tau_in, tau_out, theta_in, theta_out, theta_x], dtype=float),
         "convergence": {
             "treatment_iterations": int(treat_iters),
             "outcome_iterations": 1,

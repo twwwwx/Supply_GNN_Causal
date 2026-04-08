@@ -1,0 +1,13 @@
+[project]
+name = "supply-gnn-causal"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10.4"
+dependencies = [
+    "igraph==1.0.0",
+    "networkx==3.1",
+    "numpy==1.22.3",
+    "torch==2.0.1",
+    "torch-geometric==2.7.0",
+]

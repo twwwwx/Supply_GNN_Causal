@@ -1,24 +1,2 @@
-model,DGP,num_runs,n,seed,gen_graph,tau_true,p_treat,features,clip,L,output_dim,variance_type,variance_method,bandwidth,MSE,se_tau_hat_MC,mean_sigma_hat,cover_rate
-gnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.118,0.034454,0.524698,0.524698
-dirgnn,undir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,directed,dir_max,2.0,0.1,0.031537,0.524099,0.524099
-gnn,dir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.829,0.091159,0.61261,0.61261
-dirgnn,dir,100,200,123,rgg,2.0,0.5,node_features,0.001,2,6,directed,dir_max,2.14,0.565,0.075561,0.561157,0.561157
-dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.011 (0.007723),0.095516,0.24838,1.0
-
-dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.018 (0.011253),0.125863,0.213348,1.0
-dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.029 (0.007161),0.167768,0.209114,1.0
-dirgnn,dir,2,2000,123,rgg,2.0,0.5,node_features,0.001,2,20,skeleton,max,3.0,0.018 (0.011253),0.125863,0.213348,1.0
-
-gnn,dir,100,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.022 (0.003192),0.014771,0.230017,0.99
-dirgnn,dir,100,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.029 (0.004933),0.017094,0.232621,1.0
-gnn,undir,100,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.010 (0.001476),0.009553,0.213126,1.0
-dirgnn,undir,100,2000,123,rgg,2.0,0.5,node_features,0.001,2,6,skeleton,max,3.0,0.009 (0.001331),0.008751,0.213466,1.0
-
-gnn,dir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.019 (0.002923),0.013935,0.270679,1.0
-dirgnn,dir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.018 (0.003046),0.013302,0.268364,1.0
-
-(Below are the heterophilic generation)
-gnn,dir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.024 (0.003139),0.015402,0.270905,1.0
-dirgnn,dir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.019 (0.002526),0.013628,0.27218,1.0
-gnn,undir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.006 (0.001170),0.007516,0.258742,1.0
-dirgnn,undir,100,2000,123,er,2.0,0.5,node_features,0.001,2,6,skeleton,max,2.0,0.006 (0.000966),0.00716,0.258638,1.0
+model,DGP,num_runs,n,seed,gen_graph,tau_dir_true,tau_in_true,tau_out_true,tau_tot_true,features,clip,L,output_dim,variance_type,variance_method,bandwidth,tau_dir,tau_in,tau_out,tau_tot,mean_sigma_hat_tau_dir,mean_sigma_hat_tau_in,mean_sigma_hat_tau_out,mean_sigma_hat_tau_tot,MSE_tau_dir,MSE_tau_in,MSE_tau_out,MSE_tau_tot,cover_rate_tau_dir,cover_rate_tau_in,cover_rate_tau_out,cover_rate_tau_tot
+dirgnn,spillover,2,200,123,rgg,2.0,1.0,1.0,4.0,node_features,0.001,2,6,directed,dir_max,2.0,2.083(1.452650),0.987(0.614944),1.173(0.095411),3.994(0.626764),0.065322,0.073392,0.109368,0.132699,2.117(0.240025),0.378(0.016177),0.039(0.032939),0.393(0.008058),0.0,0.0,0.5,0.0

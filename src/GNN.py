@@ -56,6 +56,7 @@ class GNN(torch.nn.Module):
         dim,
         num_layers,
         output_dim,
+        target_dim=1,
         seed=0,
         deg_hist=None,
         aggs=("mean", "sum", "std", "min", "max"),
@@ -74,14 +75,18 @@ class GNN(torch.nn.Module):
             if l == 0:
                 prev_width = output_dim
 
-        self.output_layer = torch.nn.Linear(output_dim, 1)
+        self.target_dim = int(target_dim)
+        self.output_layer = torch.nn.Linear(output_dim, self.target_dim)
         self.ReLU = torch.nn.ReLU()
 
     def forward(self, data):
         x = data.x
         for l in range(self.num_layers):
             x = self.ReLU(self.hidden_layers[l](x, data.edge_index))
-        return torch.squeeze(self.output_layer(x))
+        out = self.output_layer(x)
+        if self.target_dim == 1:
+            return torch.squeeze(out)
+        return out
 
 
 # ==========================
@@ -95,6 +100,7 @@ class DirGNN(torch.nn.Module):
         dim,
         num_layers,
         output_dim,
+        target_dim=1,
         seed=0,
         deg_hist_in=None,
         deg_hist_out=None,
@@ -106,6 +112,7 @@ class DirGNN(torch.nn.Module):
         super().__init__()
         torch.manual_seed(seed)
         self.num_layers = num_layers
+        self.target_dim = int(target_dim)
         self.relu = torch.nn.ReLU()
 
         self.supply_layers = torch.nn.ModuleList()
@@ -119,7 +126,7 @@ class DirGNN(torch.nn.Module):
             self.combine_layers.append(torch.nn.Linear(prev_width + 2 * output_dim, output_dim))
             prev_width = output_dim
 
-        self.output_layer = torch.nn.Linear(output_dim, 1)
+        self.output_layer = torch.nn.Linear(output_dim, self.target_dim)
 
     def forward(self, data):
         x = data.x
@@ -127,7 +134,10 @@ class DirGNN(torch.nn.Module):
             h_in = self.relu(self.supply_layers[l](x, data.edge_index_in))
             h_out = self.relu(self.demand_layers[l](x, data.edge_index_out))
             x = self.relu(self.combine_layers[l](torch.cat([x, h_in, h_out], dim=-1)))
-        return torch.squeeze(self.output_layer(x))
+        out = self.output_layer(x)
+        if self.target_dim == 1:
+            return torch.squeeze(out)
+        return out
 
 
 # ==================
@@ -141,6 +151,19 @@ def train(data, model, criterion, optimizer, sample):
     loss.backward()
     optimizer.step()
     return loss, out
+
+
+def _fit_model(data, model, criterion, optimizer, sample_t):
+    old_loss, _ = train(data, model, criterion, optimizer, sample_t)
+    gain = 10.0
+    iters = 1
+    while gain > 1e-4:
+        iters += 1
+        loss, _ = train(data, model, criterion, optimizer, sample_t)
+        gain = abs(float(old_loss.item()) - float(loss.item()))
+        old_loss = loss
+        if iters >= 10000:
+            break
 
 
 # ====================
@@ -179,23 +202,13 @@ def GNN_reg(
 
     d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
     deg = torch.bincount(d, minlength=int(d.max()) + 1 if d.numel() > 0 else 1)
-    model = GNN(data.num_node_features, num_layers, output_dim, seed, deg_hist=deg)
+    model = GNN(data.num_node_features, num_layers, output_dim, target_dim=1, seed=seed, deg_hist=deg)
     data = data.to(device)
     model = model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.BCEWithLogitsLoss() if binary_output else torch.nn.MSELoss()
-    old_loss, _ = train(data, model, criterion, optimizer, sample_t)
-    gain = 10.0
-    iters = 1
-    while gain > 1e-4:
-        iters += 1
-        loss, _ = train(data, model, criterion, optimizer, sample_t)
-        gain = abs(float(old_loss.item()) - float(loss.item()))
-        old_loss = loss
-        if iters >= 10000:
-            print("GNN_reg max iters reached.")
-            break
+    _fit_model(data, model, criterion, optimizer, sample_t)
 
     out_final = torch.sigmoid(model(data)) if binary_output else model(data)
     return out_final.detach().cpu().numpy()
@@ -241,7 +254,8 @@ def GNN_reg_dir(
         data.num_node_features,
         num_layers,
         output_dim,
-        seed,
+        target_dim=1,
+        seed=seed,
         deg_hist_in=deg_in,
         deg_hist_out=deg_out,
     )
@@ -250,20 +264,241 @@ def GNN_reg_dir(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.BCEWithLogitsLoss() if binary_output else torch.nn.MSELoss()
-    old_loss, _ = train(data, model, criterion, optimizer, sample_t)
-    gain = 10.0
-    iters = 1
-    while gain > 1e-4:
-        iters += 1
-        loss, _ = train(data, model, criterion, optimizer, sample_t)
-        gain = abs(float(old_loss.item()) - float(loss.item()))
-        old_loss = loss
-        if iters >= 10000:
-            print("GNN_reg_dir max iters reached.")
-            break
+    _fit_model(data, model, criterion, optimizer, sample_t)
 
     out_final = torch.sigmoid(model(data)) if binary_output else model(data)
     return out_final.detach().cpu().numpy()
+
+
+def GNN_reg_multiclass(
+    labels,
+    X,
+    A,
+    num_classes=8,
+    num_layers=2,
+    output_dim=6,
+    sample=False,
+    seed=0,
+    use_gpu=True,
+):
+    """Multiclass classification with an undirected GNN."""
+    device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
+    y = np.asarray(labels, dtype=np.int64).reshape(-1)
+    X = np.asarray(X, dtype=float)
+    if X.ndim == 1:
+        X = X[:, None]
+    n = int(y.shape[0])
+    if X.shape[0] != n:
+        raise ValueError("labels and features must have the same length.")
+    if not isinstance(sample, np.ndarray):
+        sample = np.ones(n, dtype=bool)
+    sample_t = torch.as_tensor(sample, dtype=torch.bool, device=device)
+
+    edgelist = _to_edge_index(A, n=n)
+    data = Data(
+        x=torch.tensor(X, dtype=torch.float),
+        edge_index=torch.tensor(edgelist, dtype=torch.long),
+        y=torch.tensor(y, dtype=torch.long),
+    )
+    d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+    deg = torch.bincount(d, minlength=int(d.max()) + 1 if d.numel() > 0 else 1)
+    model = GNN(data.num_node_features, num_layers, output_dim, target_dim=int(num_classes), seed=seed, deg_hist=deg)
+    data = data.to(device)
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+    criterion = torch.nn.CrossEntropyLoss()
+    _fit_model(data, model, criterion, optimizer, sample_t)
+    with torch.no_grad():
+        logits = model(data)
+        probs = torch.softmax(logits, dim=1)
+    return probs.detach().cpu().numpy()
+
+
+def GNN_reg_dir_multiclass(
+    labels,
+    X,
+    A,
+    num_classes=8,
+    num_layers=2,
+    output_dim=6,
+    sample=False,
+    seed=0,
+    use_gpu=True,
+):
+    """Multiclass classification with a directed dual-channel GNN."""
+    device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
+    y = np.asarray(labels, dtype=np.int64).reshape(-1)
+    X = np.asarray(X, dtype=float)
+    if X.ndim == 1:
+        X = X[:, None]
+    n = int(y.shape[0])
+    if X.shape[0] != n:
+        raise ValueError("labels and features must have the same length.")
+    if not isinstance(sample, np.ndarray):
+        sample = np.ones(n, dtype=bool)
+    sample_t = torch.as_tensor(sample, dtype=torch.bool, device=device)
+
+    edge_index_in, edge_index_out = _to_directed_edge_indices(A, n=n)
+    data = Data(
+        x=torch.tensor(X, dtype=torch.float),
+        edge_index_in=torch.tensor(edge_index_in, dtype=torch.long),
+        edge_index_out=torch.tensor(edge_index_out, dtype=torch.long),
+        y=torch.tensor(y, dtype=torch.long),
+    )
+    d_in = degree(data.edge_index_in[1], num_nodes=data.num_nodes, dtype=torch.long)
+    d_out = degree(data.edge_index_out[1], num_nodes=data.num_nodes, dtype=torch.long)
+    deg_in = torch.bincount(d_in, minlength=int(d_in.max()) + 1 if d_in.numel() > 0 else 1)
+    deg_out = torch.bincount(d_out, minlength=int(d_out.max()) + 1 if d_out.numel() > 0 else 1)
+    model = DirGNN(
+        data.num_node_features,
+        num_layers,
+        output_dim,
+        target_dim=int(num_classes),
+        seed=seed,
+        deg_hist_in=deg_in,
+        deg_hist_out=deg_out,
+    )
+    data = data.to(device)
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+    criterion = torch.nn.CrossEntropyLoss()
+    _fit_model(data, model, criterion, optimizer, sample_t)
+    with torch.no_grad():
+        logits = model(data)
+        probs = torch.softmax(logits, dim=1)
+    return probs.detach().cpu().numpy()
+
+
+def _outcome_surface_from_model(model, data_base, X_base, states):
+    preds = []
+    with torch.no_grad():
+        for state in states:
+            exposure = np.repeat(np.asarray(state, dtype=float)[None, :], repeats=X_base.shape[0], axis=0)
+            x_eval = np.concatenate([X_base, exposure], axis=1)
+            data_eval = Data(**{k: v for k, v in data_base.items()})
+            data_eval.x = torch.tensor(x_eval, dtype=torch.float, device=data_base["x"].device)
+            pred = model(data_eval).detach().cpu().numpy().reshape(-1)
+            preds.append(pred)
+    return np.column_stack(preds).astype(float)
+
+
+def GNN_reg_outcome_surface(
+    Y,
+    X,
+    A,
+    exposure_obs,
+    states,
+    num_layers=2,
+    output_dim=6,
+    seed=0,
+    use_gpu=True,
+):
+    """Fit one joint outcome surface and predict for each exposure state."""
+    device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
+    y = np.asarray(Y, dtype=float).reshape(-1)
+    x = np.asarray(X, dtype=float)
+    if x.ndim == 1:
+        x = x[:, None]
+    exp_obs = np.asarray(exposure_obs, dtype=float)
+    if exp_obs.ndim != 2 or exp_obs.shape[1] != 3:
+        raise ValueError("exposure_obs must be shape (n, 3).")
+    if exp_obs.shape[0] != y.size or x.shape[0] != y.size:
+        raise ValueError("Y, X, and exposure_obs must have matching first dimension.")
+
+    x_train = np.concatenate([x, exp_obs], axis=1)
+    n = int(y.size)
+    edgelist = _to_edge_index(A, n=n)
+    data = Data(
+        x=torch.tensor(x_train, dtype=torch.float),
+        edge_index=torch.tensor(edgelist, dtype=torch.long),
+        y=torch.tensor(y, dtype=torch.float),
+    )
+
+    d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+    deg = torch.bincount(d, minlength=int(d.max()) + 1 if d.numel() > 0 else 1)
+    model = GNN(data.num_node_features, num_layers, output_dim, target_dim=1, seed=seed, deg_hist=deg)
+    data = data.to(device)
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+    criterion = torch.nn.MSELoss()
+    sample_t = torch.ones(n, dtype=torch.bool, device=device)
+    _fit_model(data, model, criterion, optimizer, sample_t)
+
+    data_base = {
+        "x": data.x,
+        "edge_index": data.edge_index,
+        "y": data.y,
+    }
+    return _outcome_surface_from_model(model, data_base, x, states)
+
+
+def GNN_reg_dir_outcome_surface(
+    Y,
+    X,
+    A,
+    exposure_obs,
+    states,
+    num_layers=2,
+    output_dim=6,
+    seed=0,
+    use_gpu=True,
+):
+    """Fit one directed joint outcome surface and predict for each exposure state."""
+    device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
+    y = np.asarray(Y, dtype=float).reshape(-1)
+    x = np.asarray(X, dtype=float)
+    if x.ndim == 1:
+        x = x[:, None]
+    exp_obs = np.asarray(exposure_obs, dtype=float)
+    if exp_obs.ndim != 2 or exp_obs.shape[1] != 3:
+        raise ValueError("exposure_obs must be shape (n, 3).")
+    if exp_obs.shape[0] != y.size or x.shape[0] != y.size:
+        raise ValueError("Y, X, and exposure_obs must have matching first dimension.")
+
+    x_train = np.concatenate([x, exp_obs], axis=1)
+    n = int(y.size)
+    edge_index_in, edge_index_out = _to_directed_edge_indices(A, n=n)
+    data = Data(
+        x=torch.tensor(x_train, dtype=torch.float),
+        edge_index_in=torch.tensor(edge_index_in, dtype=torch.long),
+        edge_index_out=torch.tensor(edge_index_out, dtype=torch.long),
+        y=torch.tensor(y, dtype=torch.float),
+    )
+
+    d_in = degree(data.edge_index_in[1], num_nodes=data.num_nodes, dtype=torch.long)
+    d_out = degree(data.edge_index_out[1], num_nodes=data.num_nodes, dtype=torch.long)
+    deg_in = torch.bincount(d_in, minlength=int(d_in.max()) + 1 if d_in.numel() > 0 else 1)
+    deg_out = torch.bincount(d_out, minlength=int(d_out.max()) + 1 if d_out.numel() > 0 else 1)
+    model = DirGNN(
+        data.num_node_features,
+        num_layers,
+        output_dim,
+        target_dim=1,
+        seed=seed,
+        deg_hist_in=deg_in,
+        deg_hist_out=deg_out,
+    )
+    data = data.to(device)
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+    criterion = torch.nn.MSELoss()
+    sample_t = torch.ones(n, dtype=torch.bool, device=device)
+    _fit_model(data, model, criterion, optimizer, sample_t)
+
+    preds = []
+    with torch.no_grad():
+        for state in states:
+            exposure = np.repeat(np.asarray(state, dtype=float)[None, :], repeats=x.shape[0], axis=0)
+            x_eval = np.concatenate([x, exposure], axis=1)
+            data_eval = Data(
+                x=torch.tensor(x_eval, dtype=torch.float, device=device),
+                edge_index_in=data.edge_index_in,
+                edge_index_out=data.edge_index_out,
+                y=data.y,
+            )
+            pred = model(data_eval).detach().cpu().numpy().reshape(-1)
+            preds.append(pred)
+    return np.column_stack(preds).astype(float)
 
 
 # ==========
