@@ -26,6 +26,18 @@ def _to_directed_edge_indices(A, n: int) -> tuple[np.ndarray, np.ndarray]:
 
     in-channel: aggregate from upstream neighbors j->i (uses original direction).
     out-channel: aggregate from downstream neighbors i->k (reverse edges so k->i messages).
+
+    Example:
+    If
+        A = [[0, 1, 0],
+             [0, 0, 0],
+             [1, 0, 0]]
+    (directed edges 0->1 and 2->0), then
+    edge_index_in  = [[0, 2],
+                      [1, 0]]
+    edge_index_out = [[1, 0],
+                      [0, 2]]
+    (both arrays have shape (2, E), columns are [source, target]).
     """
     adjacency = np.asarray(A)
     if adjacency.ndim != 2 or adjacency.shape[0] != adjacency.shape[1]:
@@ -506,30 +518,53 @@ def GNN_reg_dir_outcome_surface(
 # ==========
 if __name__ == "__main__":
     try:
-        from .gen_data import sample_data_simple
+        from .gen_data import sample_data_spillover
     except ImportError:
         try:
-            from src.gen_data import sample_data_simple
+            from src.gen_data import sample_data_spillover
         except ImportError:
-            from gen_data import sample_data_simple
+            from gen_data import sample_data_spillover
 
-    draw = sample_data_simple(sample_size=200, seed=123, graph_model="rgg", tau=2.0, p_treat=0.5)
+    draw = sample_data_spillover(
+        sample_size=200,
+        seed=123,
+        graph_model="rgg",
+        tau_dir=2.0,
+        tau_in=1.0,
+        tau_out=1.0,
+    )
 
     x = np.asarray(draw["node_features"], dtype=float)
     a = draw["adjacency"]
     y_true = np.asarray(draw["Y"], dtype=float)
-    d_true = np.asarray(draw["D"], dtype=int)
+    state_true = np.asarray(draw["state_index"], dtype=int)
 
-    y_fit = np.asarray(GNN_reg(Y=y_true, X=x, A=a, num_layers=2, output_dim=6, seed=123), dtype=float)
+    y_fit = np.asarray(
+        GNN_reg_dir(Y=y_true, X=x, A=a, num_layers=2, output_dim=6, seed=123),
+        dtype=float,
+    )
     p_fit = np.asarray(
-        GNN_reg(Y=d_true.astype(int), X=x, A=a, num_layers=2, output_dim=6, seed=456),
+        GNN_reg_dir_multiclass(
+            labels=state_true,
+            X=x,
+            A=a,
+            num_classes=8,
+            num_layers=2,
+            output_dim=6,
+            seed=456,
+        ),
         dtype=float,
     )
 
-    print("Outcome fit (first 10):")
+    print("Directed outcome fit (first 10):")
     for i in range(10):
         print(f"i={i:02d} y_fit={y_fit[i]:.6f} y_true={y_true[i]:.6f}")
 
-    print("Propensity fit (first 10):")
+    print("Directed 8-class propensity fit (first 10):")
     for i in range(10):
-        print(f"i={i:02d} p_fit={p_fit[i]:.6f} d_true={int(d_true[i])}")
+        pred_class = int(np.argmax(p_fit[i]))
+        true_class = int(state_true[i])
+        print(
+            f"i={i:02d} p_max={float(np.max(p_fit[i])):.6f} "
+            f"pred_class={pred_class} true_class={true_class}"
+        )

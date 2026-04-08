@@ -24,12 +24,12 @@ for DGP in spillover; do
       --model "$model" \
       --DGP "$DGP" \
       --num_runs 100 \
-      --n 2000 \
+      --n 1500 \
       --seed 123 \
       --gen_graph er \
       --tau_dir_true 2.0 \
       --tau_in_true 1.0 \
-      --tau_out_true 1.0 \
+      --tau_out_true -1.0 \
       --features nodes \
       --clip 0.001 \
       --L 2 \

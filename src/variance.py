@@ -26,7 +26,6 @@ def _all_pairs_shortest_paths(adjacency: np.ndarray) -> np.ndarray:
 
 
 def select_bandwidth(adjacency: np.ndarray, directed: bool = False) -> int:
-    """Bandwidth rule inspired by the main.tex note on path length / average degree."""
     a = _validate_square_adjacency(adjacency)
     graph = a if directed else _symmetrize(a)
     dist = _all_pairs_shortest_paths(graph)
@@ -56,6 +55,25 @@ def _u_kernel_from_dist(dist: np.ndarray, bandwidth: int) -> np.ndarray:
 
 
 def _pd_kernel_from_mask(mask: np.ndarray) -> np.ndarray:
+    """Compute pairwise dependence kernel from neighborhood-membership mask.
+
+    Example:
+    mask = [[1, 1, 0],
+            [1, 0, 1],
+            [0, 0, 1]]
+
+    counts = [2, 2, 1]
+    intersections =
+        [[2, 1, 0],
+         [1, 2, 1],
+         [0, 1, 1]]
+    so
+        K_ij = intersections_ij / sqrt(counts_i * counts_j),
+    giving
+        [[1.0, 0.5, 0.0],
+         [0.5, 1.0, 1/sqrt(2)],
+         [0.0, 1/sqrt(2), 1.0]].
+    """
     counts = np.sum(mask, axis=1).astype(float)
     counts = np.where(counts > 0.0, counts, 1.0)
     inter = mask.astype(float) @ mask.astype(float).T
@@ -94,11 +112,9 @@ def estimate_variance_skeleton(
     half_b = max(1, int(math.floor(b / 2)))
     nh_mask = dist <= half_b
     k_pd = _pd_kernel_from_mask(nh_mask)
-    k_max = np.maximum(k_u, k_pd)
-
     sigma2_u = _variance_from_kernel(tau_tilde, k_u, m_n=m_n)
     sigma2_pd = _variance_from_kernel(tau_tilde, k_pd, m_n=m_n)
-    sigma2_max = _variance_from_kernel(tau_tilde, k_max, m_n=m_n)
+    sigma2_max = max(sigma2_u, sigma2_pd)
     sigma2_map = {"u": sigma2_u, "pd": sigma2_pd, "max": sigma2_max}
     sigma2 = float(sigma2_map[method_norm])
     se = float(math.sqrt(max(sigma2, 0.0) / m_n)) if m_n > 0 else 0.0
@@ -109,7 +125,6 @@ def estimate_variance_skeleton(
         "m_n": m_n,
         "K_u": k_u,
         "K_pd": k_pd,
-        "K_max": k_max,
         "sigma2_u": sigma2_u,
         "sigma2_pd": sigma2_pd,
         "sigma2_max": sigma2_max,
@@ -146,15 +161,15 @@ def estimate_variance_directed(
     k_pd_out = _pd_kernel_from_mask(out_mask)
     k_pd_in = _pd_kernel_from_mask(in_mask)
 
-    k_out_max = np.maximum(k_u_out, k_pd_out)
-    k_in_max = np.maximum(k_u_in, k_pd_in)
-    k_dir_max = np.maximum(k_out_max, k_in_max)
-    k_dir_avg = 0.5 * (k_out_max + k_in_max)
+    sigma2_u_in = _variance_from_kernel(tau_tilde, k_u_in, m_n=m_n)
+    sigma2_u_out = _variance_from_kernel(tau_tilde, k_u_out, m_n=m_n)
+    sigma2_pd_in = _variance_from_kernel(tau_tilde, k_pd_in, m_n=m_n)
+    sigma2_pd_out = _variance_from_kernel(tau_tilde, k_pd_out, m_n=m_n)
 
-    sigma2_in_max = _variance_from_kernel(tau_tilde, k_in_max, m_n=m_n)
-    sigma2_out_max = _variance_from_kernel(tau_tilde, k_out_max, m_n=m_n)
-    sigma2_dir_max = _variance_from_kernel(tau_tilde, k_dir_max, m_n=m_n)
-    sigma2_dir_avg = _variance_from_kernel(tau_tilde, k_dir_avg, m_n=m_n)
+    sigma2_in_max = max(sigma2_u_in, sigma2_pd_in)
+    sigma2_out_max = max(sigma2_u_out, sigma2_pd_out)
+    sigma2_dir_max = max(sigma2_out_max, sigma2_in_max)
+    sigma2_dir_avg = 0.5 * (sigma2_out_max + sigma2_in_max)
     sigma2_map = {
         "in_max": sigma2_in_max,
         "out_max": sigma2_out_max,
@@ -172,10 +187,10 @@ def estimate_variance_directed(
         "K_u_out": k_u_out,
         "K_pd_in": k_pd_in,
         "K_pd_out": k_pd_out,
-        "K_in_max": k_in_max,
-        "K_out_max": k_out_max,
-        "K_dir_max": k_dir_max,
-        "K_dir_avg": k_dir_avg,
+        "sigma2_u_in": sigma2_u_in,
+        "sigma2_u_out": sigma2_u_out,
+        "sigma2_pd_in": sigma2_pd_in,
+        "sigma2_pd_out": sigma2_pd_out,
         "sigma2_in_max": sigma2_in_max,
         "sigma2_out_max": sigma2_out_max,
         "sigma2_dir_max": sigma2_dir_max,
@@ -183,3 +198,62 @@ def estimate_variance_directed(
         "sigma2": sigma2,
         "se": se,
     }
+
+
+if __name__ == "__main__":
+    # Smoke test 1: shortest paths on a small directed graph.
+    # Graph: 0->1->2 and 0->2, node 3 isolated.
+    a_test = np.array(
+        [
+            [0, 1, 1, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ],
+        dtype=np.int8,
+    )
+    dist = _all_pairs_shortest_paths(a_test)
+    expected = np.array(
+        [
+            [0.0, 1.0, 1.0, np.inf],
+            [np.inf, 0.0, 1.0, np.inf],
+            [np.inf, np.inf, 0.0, np.inf],
+            [np.inf, np.inf, np.inf, 0.0],
+        ],
+        dtype=float,
+    )
+
+    finite_ok = np.allclose(dist[np.isfinite(expected)], expected[np.isfinite(expected)])
+    inf_ok = np.array_equal(np.isinf(dist), np.isinf(expected))
+    if not (finite_ok and inf_ok):
+        raise AssertionError(
+            "Smoke test failed for _all_pairs_shortest_paths.\n"
+            f"Expected:\n{expected}\nGot:\n{dist}"
+        )
+    print("smoke_test_shortest_paths=PASS")
+
+    # Smoke test 2: PD kernel from explicit neighborhood mask.
+    mask_test = np.array(
+        [
+            [1, 1, 0],
+            [1, 0, 1],
+            [0, 0, 1],
+        ],
+        dtype=int,
+    )
+    k_pd = _pd_kernel_from_mask(mask_test)
+    root2 = math.sqrt(2.0)
+    expected_k_pd = np.array(
+        [
+            [1.0, 0.5, 0.0],
+            [0.5, 1.0, 1.0 / root2],
+            [0.0, 1.0 / root2, 1.0],
+        ],
+        dtype=float,
+    )
+    if not np.allclose(k_pd, expected_k_pd):
+        raise AssertionError(
+            "Smoke test failed for _pd_kernel_from_mask.\n"
+            f"Expected:\n{expected_k_pd}\nGot:\n{k_pd}"
+        )
+    print("smoke_test_pd_kernel=PASS")

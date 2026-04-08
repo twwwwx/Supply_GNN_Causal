@@ -1,9 +1,0 @@
-device_config model=dirgnn use_gpu_arg=0 cuda_available=0 using_device=cpu
-dirgnn-eval:   0%|          | 0/2 [00:00<?, ?it/s]/storage/home/wkt5100/.local/lib/python3.10/site-packages/torch_geometric/__init__.py:4: UserWarning: An issue occurred while importing 'pyg-lib'. Disabling its usage. Stacktrace: /usr/lib64/libm.so.6: version `GLIBC_2.29' not found (required by /storage/home/wkt5100/.local/lib/python3.10/site-packages/libpyg.so)
-  import torch_geometric.typing
-/storage/home/wkt5100/.local/lib/python3.10/site-packages/torch_geometric/__init__.py:4: UserWarning: An issue occurred while importing 'torch-sparse'. Disabling its usage. Stacktrace: /usr/lib64/libm.so.6: version `GLIBC_2.29' not found (required by /storage/home/wkt5100/.local/lib/python3.10/site-packages/libpyg.so)
-  import torch_geometric.typing
-dirgnn-eval:  50%|█████     | 1/2 [00:26<00:26, 26.87s/it]dirgnn-eval: 100%|██████████| 2/2 [01:07<00:00, 34.74s/it]dirgnn-eval: 100%|██████████| 2/2 [01:07<00:00, 33.56s/it]
-saved n=2000 model=dirgnn DGP=dir mean_tau_hat=2.040 mse_tau_hat=0.011 se_mse_tau_hat=0.007723 se_tau_hat=0.095516 mean_se_hat=0.248380 cover_rate=1.000000 var_type=skeleton var_method=max bw=3.0
-evaluation_time_sec=67.136 evaluation_time_min=1.119
-Wrote 1 row to /storage/work/wkt5100/Supply_GNN_Causal/results/metrics.csv

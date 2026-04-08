@@ -8,7 +8,7 @@ import numpy as np
 X_SUPPORT = np.array([0.0, 0.25, 0.5, 0.75, 1.0], dtype=float)
 THETA_D = (-0.5, 1.5, 1.0, -1.0)
 THETA_Y_MANUAL = (0.5, 2.0, 10.0, 1.0)  # (theta_1, theta_2=tau, theta_3, theta_4)
-THETA_D_DIR = (-0.5, 1.0, 0.8, 1.0, -0.6, 1.0)  # (alpha, b_in, b_out, d_in, d_out, gamma)
+THETA_D_DIR = (-1, 0.5, -0.5, 1.0, -1.0, 1.0)  # (alpha, b_in, b_out, d_in, d_out, gamma)
 THETA_Y_DIR = (0.5, 2.0, 8.0, 4.0, 1.0)  # (theta_1, theta_2=tau, theta_in, theta_out, theta_x)
 THETA_Y_SPILLOVER = (0.5, 8.0, 4.0, 1.0)  # (theta_1, theta_in, theta_out, theta_x)
 
@@ -548,7 +548,7 @@ def sample_data_simple(
 
 
 if __name__ == "__main__":
-    draw = sample_data_dir(sample_size=2000, seed=123, graph_model="rgg")
+    draw = sample_data_dir(sample_size=2000, seed=123, graph_model="er")
     d = np.asarray(draw["D"], dtype=float)
     w_in = np.asarray(draw["row_normalized_adjacency_in"], dtype=float)
     w_out = np.asarray(draw["row_normalized_adjacency_out"], dtype=float)
@@ -566,3 +566,16 @@ if __name__ == "__main__":
     print(f"prop_rho_in_eq_0={float(np.mean(treated_prop_in_nodes == 0.0)):.6f}")
     print(f"prop_rho_out_eq_1={float(np.mean(treated_prop_out_nodes == 1.0)):.6f}")
     print(f"prop_rho_out_eq_0={float(np.mean(treated_prop_out_nodes == 0.0)):.6f}")
+
+    # Treatment-group proportions.
+    d_bin = (d > 0.5).astype(int)
+    rho_in_bin = (treated_prop_in_nodes > 0.0).astype(int)
+    rho_out_bin = (treated_prop_out_nodes > 0.0).astype(int)
+    print(f"prop_D_eq_1={float(np.mean(d_bin == 1)):.6f}")
+    print(f"prop_D_eq_0={float(np.mean(d_bin == 0)):.6f}")
+    for d_val in (0, 1):
+        for rin_val in (0, 1):
+            for rout_val in (0, 1):
+                mask = (d_bin == d_val) & (rho_in_bin == rin_val) & (rho_out_bin == rout_val)
+                prop = float(np.mean(mask))
+                print(f"prop_group_D{d_val}_rin{rin_val}_rout{rout_val}={prop:.6f}")

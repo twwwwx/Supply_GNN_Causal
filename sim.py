@@ -260,6 +260,7 @@ def main():
             "mean_sigma_hat": round(mean_se_hat, 6),
             "mse": f"{mse_tau_hat:.3f}({se_mse_tau_hat:.6f})",
             "cover_rate": round(cover_rate, 6),
+            "variance_method": variance_method_map[estimand],
             "bandwidth": bandwidth_out,
         }
         print(
@@ -280,9 +281,9 @@ def main():
         bandwidth_out = unique_bw[0] if len(unique_bw) == 1 else "|".join(unique_bw)
 
     var_method_candidates = [
-        metrics_by_estimand[k]["variance_method"]
+        metrics_by_estimand[k].get("variance_method", "")
         for k in ESTIMANDS
-        if metrics_by_estimand[k]["variance_method"] != ""
+        if metrics_by_estimand[k].get("variance_method", "") != ""
     ]
     if not var_method_candidates:
         variance_method_out = ""
