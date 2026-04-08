@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=sim_gnn          # Job name
-#SBATCH --time=1:30:00          # Time limit hrs:min:sec
+#SBATCH --time=3:30:00          # Time limit hrs:min:sec
 #SBATCH --account=open
 #SBATCH --partition=standard
 #SBATCH --output=/dev/null      # Prevent SLURM from handling output directly
@@ -23,7 +23,7 @@ for DGP in dir; do
     python sim.py \
       --model "$model" \
       --DGP "$DGP" \
-      --num_runs 100 \
+      --num_runs 500 \
       --n 2000 \
       --seed 123 \
       --gen_graph er \
