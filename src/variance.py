@@ -137,7 +137,7 @@ def estimate_variance_directed(
     tau_tilde: np.ndarray,
     adjacency_directed: np.ndarray,
     bandwidth: int | None = None,
-    method: str = "dir_max",
+    method: str = "dir_avg",
 ) -> dict:
     """Directed-neighborhood estimators.
 

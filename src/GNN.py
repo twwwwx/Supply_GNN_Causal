@@ -121,6 +121,8 @@ class DirGNN(torch.nn.Module):
     ):
         if num_layers < 1:
             raise ValueError("Must have at least one hidden layer.")
+        if int(output_dim) < 2:
+            raise ValueError("output_dim must be at least 2 for dual-channel DirGNN.")
         super().__init__()
         torch.manual_seed(seed)
         self.num_layers = num_layers
@@ -131,14 +133,18 @@ class DirGNN(torch.nn.Module):
         self.demand_layers = torch.nn.ModuleList()
         self.combine_layers = torch.nn.ModuleList()
 
+        # Split hidden width across in/out channels while preserving total width.
+        in_width = int(output_dim) // 2
+        out_width = int(output_dim) - in_width
+
         prev_width = dim
         for _ in range(self.num_layers):
-            self.supply_layers.append(PNAConv(prev_width, output_dim, aggs, scalers, deg=deg_hist_in))
-            self.demand_layers.append(PNAConv(prev_width, output_dim, aggs, scalers, deg=deg_hist_out))
-            self.combine_layers.append(torch.nn.Linear(prev_width + 2 * output_dim, output_dim))
+            self.supply_layers.append(PNAConv(prev_width, in_width, aggs, scalers, deg=deg_hist_in))
+            self.demand_layers.append(PNAConv(prev_width, out_width, aggs, scalers, deg=deg_hist_out))
+            self.combine_layers.append(torch.nn.Linear(prev_width + in_width + out_width, int(output_dim)))
             prev_width = output_dim
 
-        self.output_layer = torch.nn.Linear(output_dim, self.target_dim)
+        self.output_layer = torch.nn.Linear(int(output_dim), self.target_dim)
 
     def forward(self, data):
         x = data.x

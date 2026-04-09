@@ -202,7 +202,7 @@ def tau_vector_and_se_from_gnn(
                 method=vmethod,
             )
         elif vtype == "directed":
-            vmethod = "dir_max" if variance_method is None else variance_method
+            vmethod = "dir_avg" if variance_method is None else variance_method
             var = estimate_variance_directed(
                 tau_tilde,
                 a,

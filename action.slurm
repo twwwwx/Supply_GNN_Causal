@@ -18,24 +18,24 @@ conda activate tensorflow
 exec > "$log_file" 2>&1
 
 # Run both GNN variants for the spillover DGP (1 wide row per command in metrics.csv)
-for DGP in spillover; do
+for variance_type in skeleton; do
   for model in gnn dirgnn; do
     python sim.py \
       --model "$model" \
-      --DGP "$DGP" \
+      --DGP spillover \
       --num_runs 100 \
       --n 1500 \
       --seed 123 \
-      --gen_graph er \
-      --tau_dir_true 2.0 \
+      --gen_graph rgg \
+      --tau_dir_true -3.0 \
       --tau_in_true 1.0 \
-      --tau_out_true -1.0 \
+      --tau_out_true 1.0 \
       --features nodes \
       --clip 0.001 \
       --L 2 \
       --output_dim 6 \
       --metrics_csv results/metrics.csv \
-      --variance_type directed \
+      --variance_type "$variance_type" \
       --use_gpu 1
   done
 done

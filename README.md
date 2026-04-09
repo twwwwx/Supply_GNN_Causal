@@ -79,7 +79,7 @@ python sim.py \
   --L 2 \
   --output_dim 6 \
   --variance_type directed \
-  --variance_method dir_max \
+  --variance_method dir_avg \
   --metrics_csv results/metrics.csv
 ```
 
