@@ -1,0 +1,2 @@
+config_id,output_dim,width_mode,dropout,weight_decay,activation,num_layers,num_folds,num_data_seeds,mean_outcome_rmse,std_outcome_rmse,mean_gps_ce,std_gps_ce,n_eval_folds,runtime_sec,z_outcome_rmse,z_gps_ce,joint_score,rank
+cfg_001,6,split,0.15,0.0,elu,2,3,2,1.4887365301450093,0.08156035020284519,0.9506538410981497,0.12664170361864166,6,161.04943203926086,0.0,0.0,0.0,1

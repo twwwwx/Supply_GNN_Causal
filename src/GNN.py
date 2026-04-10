@@ -114,6 +114,7 @@ class DirGNN(torch.nn.Module):
         output_dim,
         target_dim=1,
         seed=0,
+        dropout=0.1,
         deg_hist_in=None,
         deg_hist_out=None,
         aggs=("mean", "sum", "std", "min", "max"),
@@ -127,7 +128,8 @@ class DirGNN(torch.nn.Module):
         torch.manual_seed(seed)
         self.num_layers = num_layers
         self.target_dim = int(target_dim)
-        self.relu = torch.nn.ReLU()
+        self.activation = torch.nn.ELU()
+        self.dropout = torch.nn.Dropout(p=float(dropout))
 
         self.supply_layers = torch.nn.ModuleList()
         self.demand_layers = torch.nn.ModuleList()
@@ -149,9 +151,12 @@ class DirGNN(torch.nn.Module):
     def forward(self, data):
         x = data.x
         for l in range(self.num_layers):
-            h_in = self.relu(self.supply_layers[l](x, data.edge_index_in))
-            h_out = self.relu(self.demand_layers[l](x, data.edge_index_out))
-            x = self.relu(self.combine_layers[l](torch.cat([x, h_in, h_out], dim=-1)))
+            h_in = self.activation(self.supply_layers[l](x, data.edge_index_in))
+            h_out = self.activation(self.demand_layers[l](x, data.edge_index_out))
+            h_in = self.dropout(h_in)
+            h_out = self.dropout(h_out)
+            x = self.activation(self.combine_layers[l](torch.cat([x, h_in, h_out], dim=-1)))
+            x = self.dropout(x)
         out = self.output_layer(x)
         if self.target_dim == 1:
             return torch.squeeze(out)
@@ -171,17 +176,33 @@ def train(data, model, criterion, optimizer, sample):
     return loss, out
 
 
-def _fit_model(data, model, criterion, optimizer, sample_t):
-    old_loss, _ = train(data, model, criterion, optimizer, sample_t)
-    gain = 10.0
-    iters = 1
-    while gain > 1e-4:
-        iters += 1
+def _fit_model(
+    data,
+    model,
+    criterion,
+    optimizer,
+    sample_t,
+    max_iters=1200,
+    tol=2e-3,
+    patience=6,
+    min_iters=20,
+    scheduler=None,
+):
+    old_loss = None
+    stable_count = 0
+    for iters in range(1, int(max_iters) + 1):
         loss, _ = train(data, model, criterion, optimizer, sample_t)
-        gain = abs(float(old_loss.item()) - float(loss.item()))
-        old_loss = loss
-        if iters >= 10000:
-            break
+        loss_val = float(loss.item())
+        if scheduler is not None:
+            scheduler.step(loss_val)
+        if old_loss is not None:
+            if abs(old_loss - loss_val) < float(tol):
+                stable_count += 1
+            else:
+                stable_count = 0
+            if iters >= int(min_iters) and stable_count >= int(patience):
+                break
+        old_loss = loss_val
 
 
 # ====================
@@ -238,9 +259,14 @@ def GNN_reg_dir(
     A,
     num_layers=2,
     output_dim=6,
+    dropout=0.1,
     sample=False,
     seed=0,
     use_gpu=True,
+    use_plateau=False,
+    plateau_factor=0.5,
+    plateau_patience=8,
+    plateau_min_lr=1e-5,
 ):
     """Nonparametric regression using a directed dual-channel GNN."""
     device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
@@ -274,6 +300,7 @@ def GNN_reg_dir(
         output_dim,
         target_dim=1,
         seed=seed,
+        dropout=float(dropout),
         deg_hist_in=deg_in,
         deg_hist_out=deg_out,
     )
@@ -282,7 +309,16 @@ def GNN_reg_dir(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.BCEWithLogitsLoss() if binary_output else torch.nn.MSELoss()
-    _fit_model(data, model, criterion, optimizer, sample_t)
+    scheduler = None
+    if bool(use_plateau):
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=float(plateau_factor),
+            patience=int(plateau_patience),
+            min_lr=float(plateau_min_lr),
+        )
+    _fit_model(data, model, criterion, optimizer, sample_t, scheduler=scheduler)
 
     out_final = torch.sigmoid(model(data)) if binary_output else model(data)
     return out_final.detach().cpu().numpy()
@@ -339,9 +375,14 @@ def GNN_reg_dir_multiclass(
     num_classes=8,
     num_layers=2,
     output_dim=6,
+    dropout=0.1,
     sample=False,
     seed=0,
     use_gpu=True,
+    use_plateau=False,
+    plateau_factor=0.5,
+    plateau_patience=8,
+    plateau_min_lr=1e-5,
 ):
     """Multiclass classification with a directed dual-channel GNN."""
     device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
@@ -373,6 +414,7 @@ def GNN_reg_dir_multiclass(
         output_dim,
         target_dim=int(num_classes),
         seed=seed,
+        dropout=float(dropout),
         deg_hist_in=deg_in,
         deg_hist_out=deg_out,
     )
@@ -380,7 +422,16 @@ def GNN_reg_dir_multiclass(
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.CrossEntropyLoss()
-    _fit_model(data, model, criterion, optimizer, sample_t)
+    scheduler = None
+    if bool(use_plateau):
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=float(plateau_factor),
+            patience=int(plateau_patience),
+            min_lr=float(plateau_min_lr),
+        )
+    _fit_model(data, model, criterion, optimizer, sample_t, scheduler=scheduler)
     with torch.no_grad():
         logits = model(data)
         probs = torch.softmax(logits, dim=1)
@@ -458,8 +509,13 @@ def GNN_reg_dir_outcome_surface(
     states,
     num_layers=2,
     output_dim=6,
+    dropout=0.1,
     seed=0,
     use_gpu=True,
+    use_plateau=False,
+    plateau_factor=0.5,
+    plateau_patience=8,
+    plateau_min_lr=1e-5,
 ):
     """Fit one directed joint outcome surface and predict for each exposure state."""
     device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
@@ -493,6 +549,7 @@ def GNN_reg_dir_outcome_surface(
         output_dim,
         target_dim=1,
         seed=seed,
+        dropout=float(dropout),
         deg_hist_in=deg_in,
         deg_hist_out=deg_out,
     )
@@ -501,7 +558,16 @@ def GNN_reg_dir_outcome_surface(
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.MSELoss()
     sample_t = torch.ones(n, dtype=torch.bool, device=device)
-    _fit_model(data, model, criterion, optimizer, sample_t)
+    scheduler = None
+    if bool(use_plateau):
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=float(plateau_factor),
+            patience=int(plateau_patience),
+            min_lr=float(plateau_min_lr),
+        )
+    _fit_model(data, model, criterion, optimizer, sample_t, scheduler=scheduler)
 
     preds = []
     with torch.no_grad():
