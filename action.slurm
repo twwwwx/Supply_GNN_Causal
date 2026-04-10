@@ -1,15 +1,18 @@
 #!/bin/bash
-#SBATCH --job-name=sim_gnn          # Job name
-#SBATCH --time=1:30:00          # Time limit hrs:min:sec
+#SBATCH --job-name=sim_stats
+#SBATCH --time=2:00:00
 #SBATCH --account=open
 #SBATCH --partition=standard
-#SBATCH --output=/dev/null      # Prevent SLURM from handling output directly
-#SBATCH --mem=16G                # Memory demand (e.g., 4GB)
+#SBATCH --output=/dev/null
+#SBATCH --mem=16G
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:p100:1
+
+set -euo pipefail
 
 log_name=$(date +"%m%d%H%M")
 log_file="log/${log_name}.log"
+
+mkdir -p log results
 
 module load anaconda
 conda activate tensorflow
@@ -17,28 +20,115 @@ conda activate tensorflow
 # Redirect all output to the log file
 exec > "$log_file" 2>&1
 
-# Run both GNN variants for the spillover DGP (1 wide row per command in metrics.csv)
-for variance_type in skeleton; do
-  for model in gnn dirgnn; do
-    python sim.py \
-      --model "$model" \
-      --DGP spillover \
-      --num_runs 100 \
-      --n 1500 \
-      --seed 123 \
-      --gen_graph rgg \
-      --tau_dir_true -3.0 \
-      --tau_in_true 1.0 \
-      --tau_out_true 1.0 \
-      --features nodes \
-      --clip 0.001 \
-      --L 2 \
-      --output_dim 6 \
-      --metrics_csv results/metrics.csv \
-      --variance_type "$variance_type" \
-      --use_gpu 1
+# -----------------------------
+# Sweep knobs (edit as needed)
+# -----------------------------
+METRICS_CSV="${METRICS_CSV:-results/metrics.csv}"
+NUM_RUNS="${NUM_RUNS:-100}"
+USE_GPU="${USE_GPU:-0}"
+MAX_CASES="${MAX_CASES:-0}"  # 0 => no cap
+
+MODELS=(gnn dirgnn)
+GRAPH_MODELS=(rgg)
+SEEDS=(123)
+SAMPLE_SIZES=(1500)
+CLIPS=(0.001)
+LAYERS=(2)
+OUTPUT_DIMS=(6)
+
+VARIANCE_TYPES=(skeleton directed)
+SKELETON_METHODS=(max)
+DIRECTED_METHODS=(dir_max)
+
+run_case() {
+  local model="$1"
+  local graph="$2"
+  local seed="$3"
+  local n="$4"
+  local clip="$5"
+  local L="$6"
+  local out_dim="$7"
+  local vtype="$8"
+  local vmethod="$9"
+
+  local cmd=(
+    python sim.py
+    --model "$model"
+    --DGP spillover
+    --num_runs "$NUM_RUNS"
+    --n "$n"
+    --seed "$seed"
+    --gen_graph "$graph"
+    --tau_dir_true -4.0
+    --tau_in_true 2.0
+    --tau_out_true 2.0
+    --features nodes
+    --clip "$clip"
+    --L "$L"
+    --output_dim "$out_dim"
+    --metrics_csv "$METRICS_CSV"
+    --variance_type "$vtype"
+    --use_gpu "$USE_GPU"
+  )
+
+  if [[ -n "$vmethod" ]]; then
+    cmd+=(--variance_method "$vmethod")
+  fi
+
+  echo "Running: ${cmd[*]}"
+  "${cmd[@]}"
+}
+
+case_count=0
+
+for model in "${MODELS[@]}"; do
+  for graph in "${GRAPH_MODELS[@]}"; do
+    for seed in "${SEEDS[@]}"; do
+      for n in "${SAMPLE_SIZES[@]}"; do
+        for clip in "${CLIPS[@]}"; do
+          for L in "${LAYERS[@]}"; do
+            for out_dim in "${OUTPUT_DIMS[@]}"; do
+              for vtype in "${VARIANCE_TYPES[@]}"; do
+                # GNN should not run directed variance.
+                if [[ "$model" == "gnn" && "$vtype" == "directed" ]]; then
+                  continue
+                fi
+                # DirGNN should run only directed variance.
+                if [[ "$model" == "dirgnn" && "$vtype" != "directed" ]]; then
+                  continue
+                fi
+
+                methods=("")
+                if [[ "$vtype" == "skeleton" ]]; then
+                  methods=("${SKELETON_METHODS[@]}")
+                elif [[ "$vtype" == "directed" ]]; then
+                  methods=("${DIRECTED_METHODS[@]}")
+                fi
+
+                for vmethod in "${methods[@]}"; do
+                  run_case "$model" "$graph" "$seed" "$n" "$clip" "$L" "$out_dim" "$vtype" "$vmethod"
+                  case_count=$((case_count + 1))
+                  if [[ "$MAX_CASES" -gt 0 && "$case_count" -ge "$MAX_CASES" ]]; then
+                    echo "Reached MAX_CASES=${MAX_CASES}; stopping early."
+                    echo "Completed cases: ${case_count}"
+                    # Add a blank separator line after this SLURM run.
+                    printf '\n' >> "$METRICS_CSV"
+                    echo "Job ID: ${SLURM_JOB_ID:-N/A}"
+                    exit 0
+                  fi
+                done
+              done
+            done
+          done
+        done
+      done
+    done
   done
 done
 
-# Output the job number to the log file
+echo "Completed cases: ${case_count}"
+
+# Add a blank separator line after this SLURM run.
+printf '\n' >> "$METRICS_CSV"
+
 echo "Job ID: ${SLURM_JOB_ID}"
