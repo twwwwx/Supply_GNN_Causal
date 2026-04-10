@@ -8,7 +8,7 @@ import numpy as np
 X_SUPPORT = np.array([0.0, 0.25, 0.5, 0.75, 1.0], dtype=float)
 THETA_D = (-0.5, 1.5, 1.0, -1.0)
 THETA_Y_MANUAL = (0.5, 2.0, 10.0, 1.0)  # (theta_1, theta_2=tau, theta_3, theta_4)
-THETA_D_DIR = (-0.5, 1.0, 0.8, 1.0, -0.6, 1.0)  # (alpha, b_in, b_out, d_in, d_out, gamma)
+THETA_D_DIR = (-1.5, 2.0, 0, 0.5, 0, 1.0)  # (alpha, b_in, b_out, d_in, d_out, gamma)
 THETA_Y_DIR = (0.5, 2.0, 8.0, 4.0, 1.0)  # (theta_1, theta_2=tau, theta_in, theta_out, theta_x)
 THETA_Y_SPILLOVER = (0.5, 8.0, 4.0, 1.0)  # (theta_1, theta_in, theta_out, theta_x)
 

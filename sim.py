@@ -73,6 +73,26 @@ def draw_data(
     )
 
 
+def log_data_proportions(draw: dict, label: str = "gen_data_preview") -> None:
+    d = np.asarray(draw["D"], dtype=int).reshape(-1)
+    rho_in = np.asarray(draw["rho_in"], dtype=int).reshape(-1)
+    rho_out = np.asarray(draw["rho_out"], dtype=int).reshape(-1)
+    state_idx = np.asarray(draw["state_index"], dtype=int).reshape(-1)
+    adjacency = np.asarray(draw["adjacency"])
+    n = int(d.size)
+    edge_density = float(np.mean(adjacency != 0)) if adjacency.size > 0 else 0.0
+
+    print(
+        f"{label} n={n} "
+        f"prop_D_eq_1={float(np.mean(d == 1)):.6f} "
+        f"prop_rho_in_eq_1={float(np.mean(rho_in == 1)):.6f} "
+        f"prop_rho_out_eq_1={float(np.mean(rho_out == 1)):.6f} "
+        f"edge_density={edge_density:.6f}"
+    )
+    for state in range(8):
+        print(f"{label} prop_state_{state:03b}={float(np.mean(state_idx == state)):.6f}")
+
+
 def estimate_from_model(
     model: str,
     draw: dict,
@@ -80,6 +100,7 @@ def estimate_from_model(
     clip: float,
     L: int,
     output_dim: int,
+    dir_dropout_rate: float,
     seed: int,
     variance_type: str,
     variance_method: str | None,
@@ -96,6 +117,7 @@ def estimate_from_model(
         clip=clip,
         num_layers=L,
         output_dim=output_dim,
+        dir_dropout_rate=dir_dropout_rate,
         seed=seed,
         directed=(model == "dirgnn"),
         use_gpu=use_gpu,
@@ -127,6 +149,7 @@ def main():
     parser.add_argument("--clip", type=float, default=1e-3)
     parser.add_argument("--L", type=int, default=2)
     parser.add_argument("--output_dim", type=int, default=6)
+    parser.add_argument("--dir_dropout_rate", type=float, default=0.0, help="Dropout rate for DirGNN hidden activations")
     parser.add_argument("--variance_type", type=str, default="skeleton", help="iid, skeleton, or directed")
     parser.add_argument("--variance_method", type=str, default="", help="Kernel method inside variance type")
     parser.add_argument("--bandwidth", type=int, default=None, help="Optional fixed bandwidth")
@@ -146,6 +169,8 @@ def main():
         raise ValueError("--variance_type must be iid, skeleton, or directed.")
     variance_method = args.variance_method.strip() or None
     use_gpu = bool(int(args.use_gpu))
+    if args.dir_dropout_rate < 0.0 or args.dir_dropout_rate >= 1.0:
+        raise ValueError("--dir_dropout_rate must be in [0.0, 1.0).")
 
     if model == "gnn" and variance_type == "directed":
         warnings.warn(
@@ -185,6 +210,17 @@ def main():
         "tau_tot": float(args.tau_dir_true + args.tau_in_true + args.tau_out_true),
     }
 
+    # Startup data preview from src/gen_data.py so proportions are visible in log.
+    preview_draw = draw_data(
+        n=args.n,
+        seed=args.seed,
+        gen_graph=args.gen_graph,
+        tau_dir_true=args.tau_dir_true,
+        tau_in_true=args.tau_in_true,
+        tau_out_true=args.tau_out_true,
+    )
+    log_data_proportions(preview_draw)
+
     tau_hats = {k: [] for k in ESTIMANDS}
     se_hats = {k: [] for k in ESTIMANDS}
     cover_hits = {k: [] for k in ESTIMANDS}
@@ -210,6 +246,7 @@ def main():
             clip=args.clip,
             L=args.L,
             output_dim=args.output_dim,
+            dir_dropout_rate=args.dir_dropout_rate,
             seed=draw_seed,
             variance_type=variance_type,
             variance_method=variance_method,

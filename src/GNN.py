@@ -89,12 +89,12 @@ class GNN(torch.nn.Module):
 
         self.target_dim = int(target_dim)
         self.output_layer = torch.nn.Linear(output_dim, self.target_dim)
-        self.ReLU = torch.nn.ReLU()
+        self.activation = torch.nn.ReLU()
 
     def forward(self, data):
         x = data.x
         for l in range(self.num_layers):
-            x = self.ReLU(self.hidden_layers[l](x, data.edge_index))
+            x = self.activation(self.hidden_layers[l](x, data.edge_index))
         out = self.output_layer(x)
         if self.target_dim == 1:
             return torch.squeeze(out)
@@ -114,6 +114,7 @@ class DirGNN(torch.nn.Module):
         output_dim,
         target_dim=1,
         seed=0,
+        dropout_rate=0.0,
         deg_hist_in=None,
         deg_hist_out=None,
         aggs=("mean", "sum", "std", "min", "max"),
@@ -123,11 +124,14 @@ class DirGNN(torch.nn.Module):
             raise ValueError("Must have at least one hidden layer.")
         if int(output_dim) < 2:
             raise ValueError("output_dim must be at least 2 for dual-channel DirGNN.")
+        if float(dropout_rate) < 0.0 or float(dropout_rate) >= 1.0:
+            raise ValueError("dropout_rate must be in [0.0, 1.0).")
         super().__init__()
         torch.manual_seed(seed)
         self.num_layers = num_layers
         self.target_dim = int(target_dim)
-        self.relu = torch.nn.ReLU()
+        self.activation = torch.nn.ELU()
+        self.dropout = torch.nn.Identity() if float(dropout_rate) == 0.0 else torch.nn.Dropout(p=float(dropout_rate))
 
         self.supply_layers = torch.nn.ModuleList()
         self.demand_layers = torch.nn.ModuleList()
@@ -149,9 +153,9 @@ class DirGNN(torch.nn.Module):
     def forward(self, data):
         x = data.x
         for l in range(self.num_layers):
-            h_in = self.relu(self.supply_layers[l](x, data.edge_index_in))
-            h_out = self.relu(self.demand_layers[l](x, data.edge_index_out))
-            x = self.relu(self.combine_layers[l](torch.cat([x, h_in, h_out], dim=-1)))
+            h_in = self.dropout(self.activation(self.supply_layers[l](x, data.edge_index_in)))
+            h_out = self.dropout(self.activation(self.demand_layers[l](x, data.edge_index_out)))
+            x = self.dropout(self.activation(self.combine_layers[l](torch.cat([x, h_in, h_out], dim=-1))))
         out = self.output_layer(x)
         if self.target_dim == 1:
             return torch.squeeze(out)
@@ -171,7 +175,14 @@ def train(data, model, criterion, optimizer, sample):
     return loss, out
 
 
-def _fit_model(data, model, criterion, optimizer, sample_t):
+def _fit_model(
+    data,
+    model,
+    criterion,
+    optimizer,
+    sample_t,
+):
+    """Legacy convergence loop used before dropout-aware early stopping."""
     old_loss, _ = train(data, model, criterion, optimizer, sample_t)
     gain = 10.0
     iters = 1
@@ -181,6 +192,36 @@ def _fit_model(data, model, criterion, optimizer, sample_t):
         gain = abs(float(old_loss.item()) - float(loss.item()))
         old_loss = loss
         if iters >= 10000:
+            break
+
+
+def _fit_model_early_stop(
+    data,
+    model,
+    criterion,
+    optimizer,
+    sample_t,
+    min_iters: int = 50,
+    max_iters: int = 1000,
+    tol: float = 5e-4,
+    patience: int = 20,
+):
+    """Fit with patience-based early stopping robust to noisy (e.g., dropout) loss."""
+    loss, _ = train(data, model, criterion, optimizer, sample_t)
+    best_loss = float(loss.item())
+    no_improve_steps = 0
+
+    for iters in range(2, int(max_iters) + 1):
+        loss, _ = train(data, model, criterion, optimizer, sample_t)
+        loss_val = float(loss.item())
+
+        if loss_val < (best_loss - float(tol)):
+            best_loss = loss_val
+            no_improve_steps = 0
+        else:
+            no_improve_steps += 1
+
+        if iters >= int(min_iters) and no_improve_steps >= int(patience):
             break
 
 
@@ -238,6 +279,7 @@ def GNN_reg_dir(
     A,
     num_layers=2,
     output_dim=6,
+    dropout_rate=0.0,
     sample=False,
     seed=0,
     use_gpu=True,
@@ -274,6 +316,7 @@ def GNN_reg_dir(
         output_dim,
         target_dim=1,
         seed=seed,
+        dropout_rate=dropout_rate,
         deg_hist_in=deg_in,
         deg_hist_out=deg_out,
     )
@@ -282,7 +325,10 @@ def GNN_reg_dir(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.BCEWithLogitsLoss() if binary_output else torch.nn.MSELoss()
-    _fit_model(data, model, criterion, optimizer, sample_t)
+    if float(dropout_rate) == 0.0:
+        _fit_model(data, model, criterion, optimizer, sample_t)
+    else:
+        _fit_model_early_stop(data, model, criterion, optimizer, sample_t)
 
     out_final = torch.sigmoid(model(data)) if binary_output else model(data)
     return out_final.detach().cpu().numpy()
@@ -339,6 +385,7 @@ def GNN_reg_dir_multiclass(
     num_classes=8,
     num_layers=2,
     output_dim=6,
+    dropout_rate=0.0,
     sample=False,
     seed=0,
     use_gpu=True,
@@ -373,6 +420,7 @@ def GNN_reg_dir_multiclass(
         output_dim,
         target_dim=int(num_classes),
         seed=seed,
+        dropout_rate=dropout_rate,
         deg_hist_in=deg_in,
         deg_hist_out=deg_out,
     )
@@ -380,7 +428,10 @@ def GNN_reg_dir_multiclass(
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.CrossEntropyLoss()
-    _fit_model(data, model, criterion, optimizer, sample_t)
+    if float(dropout_rate) == 0.0:
+        _fit_model(data, model, criterion, optimizer, sample_t)
+    else:
+        _fit_model_early_stop(data, model, criterion, optimizer, sample_t)
     with torch.no_grad():
         logits = model(data)
         probs = torch.softmax(logits, dim=1)
@@ -458,6 +509,7 @@ def GNN_reg_dir_outcome_surface(
     states,
     num_layers=2,
     output_dim=6,
+    dropout_rate=0.0,
     seed=0,
     use_gpu=True,
 ):
@@ -493,6 +545,7 @@ def GNN_reg_dir_outcome_surface(
         output_dim,
         target_dim=1,
         seed=seed,
+        dropout_rate=dropout_rate,
         deg_hist_in=deg_in,
         deg_hist_out=deg_out,
     )
@@ -501,7 +554,10 @@ def GNN_reg_dir_outcome_surface(
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     criterion = torch.nn.MSELoss()
     sample_t = torch.ones(n, dtype=torch.bool, device=device)
-    _fit_model(data, model, criterion, optimizer, sample_t)
+    if float(dropout_rate) == 0.0:
+        _fit_model(data, model, criterion, optimizer, sample_t)
+    else:
+        _fit_model_early_stop(data, model, criterion, optimizer, sample_t)
 
     preds = []
     with torch.no_grad():

@@ -97,6 +97,7 @@ def tau_vector_and_se_from_gnn(
     clip: float = 1e-3,
     num_layers: int = 2,
     output_dim: int = 6,
+    dir_dropout_rate: float = 0.0,
     seed: int = 0,
     directed: bool = False,
     use_gpu: bool = True,
@@ -116,6 +117,8 @@ def tau_vector_and_se_from_gnn(
 
     prop_fn = GNN_reg_dir_multiclass if directed else GNN_reg_multiclass
     out_fn = GNN_reg_dir_outcome_surface if directed else GNN_reg_outcome_surface
+    directed_kwargs_prop = {"dropout_rate": dir_dropout_rate} if directed else {}
+    directed_kwargs_out = {"dropout_rate": 0.0} if directed else {}
 
     e_hat = np.asarray(
         prop_fn(
@@ -127,6 +130,7 @@ def tau_vector_and_se_from_gnn(
             output_dim=output_dim,
             seed=seed,
             use_gpu=use_gpu,
+            **directed_kwargs_prop,
         ),
         dtype=float,
     )
@@ -143,6 +147,7 @@ def tau_vector_and_se_from_gnn(
             output_dim=output_dim,
             seed=seed + 1,
             use_gpu=use_gpu,
+            **directed_kwargs_out,
         ),
         dtype=float,
     )
